@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -10,10 +11,6 @@ import os
 import hashlib
 import uuid
 import uvicorn
-
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
@@ -46,9 +43,8 @@ def get_current_user(request: Request):
 
     return user
 
-
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     with engine.connect() as conn:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS usuarios (
@@ -112,12 +108,16 @@ async def startup():
         """), {"senha": hash_password("123456")})
 
         conn.commit()
+    yield
 
+app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 # --- ROTAS DE AUTENTICAÇÃO ---
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request, "login.html", {})
 
 
 @app.post("/login")
