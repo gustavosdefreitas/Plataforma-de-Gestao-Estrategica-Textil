@@ -1,6 +1,16 @@
-# Sistema de Controle de Estoque Multi-Empresa 📦
+# Plataforma de Gestão Estratégica Têxtil (Estoque Fácil MEI)
 
-Projeto desenvolvido para a disciplina de Projeto Integrador da **Univesp**. O sistema permite o gerenciamento de estoque, vendas, fornecedores e usuários para múltiplas empresas em uma única interface.
+Projeto Integrador III - UNIVESP > Uma solução full-stack para transformação digital e controle inteligente de inventário para microempreendedores do setor têxtil e aviamentos.
+Este sistema foi desenvolvido para substituir controles manuais (livros físicos) por uma gestão digital centralizada em nuvem. O foco principal é oferecer inteligência de negócio através de dashboards, alertas de estoque baixo e uma arquitetura escalável baseada em APIs.
+
+## Principais Funcionalidades
+
+- **Dashboard Estratégico:** Visualização em tempo real do giro de estoque e métricas de vendas.
+- **Gestão de Inventário (CRUD):** Controle detalhado de produtos com atributos específicos (cor, tamanho, fornecedor).
+- **Alertas Inteligentes:** Notificações automáticas quando itens atingem o nível crítico de reposição.
+- **Arquitetura Multi-tenant:** Suporte para gerenciamento de múltiplas empresas e perfis de acesso (Admin/Operador).
+ - **Histórico Auditável:** Registro de movimentações para auxílio na conformidade fiscal (DAS-MEI).
+
 
 ## 🚀 Requisitos Atendidos (Checklist Univesp)
 
