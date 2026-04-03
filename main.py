@@ -91,7 +91,7 @@ async def lifespan(app: FastAPI):
                 quantidade NUMERIC(10,2) NOT NULL,
                 preco_unitario NUMERIC(10,2) NOT NULL,
                 total NUMERIC(10,2) NOT NULL,
-                data TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                data_venda TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
 
@@ -532,17 +532,17 @@ async def registrar_venda(produto_id: int = Form(...), qtd_venda: float = Form(.
         if prod and float(prod.quantidade) >= qtd_venda:
             preco_unitario = float(prod.preco)
             total = qtd_venda * preco_unitario
-            data = datetime.now()
+            data_venda = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             conn.execute(text("""
-                INSERT INTO vendas (produto_id, quantidade, preco_unitario, total, data)
-                VALUES (:produto_id, :quantidade, :preco_unitario, :total, :data)
+                INSERT INTO vendas (produto_id, quantidade, preco_unitario, total, data_venda)
+                VALUES (:produto_id, :quantidade, :preco_unitario, :total, :data_venda)
             """), {
                 "produto_id": produto_id,
                 "quantidade": qtd_venda,
                 "preco_unitario": preco_unitario,
                 "total": total,
-                "data": data
+                "data_venda": data_venda
             })
 
             conn.execute(text("""

@@ -120,7 +120,7 @@
                             {% for venda in vendas_recentes %}
                             <tr>
                                 <td>{{ venda.nome }}</td>
-                                <td>{{ venda.data }}</td>
+                                <td>{{ venda.data_venda }}</td>
                                 <td>{{ venda.quantidade }}</td>
                                 <td class="text-success fw-bold">R$ {{ "%.2f"|format(venda.total) }}</td>
                             </tr>
