@@ -47,7 +47,7 @@ def get_current_user(request: Request):
     return user
 
 
-@app.on_event("startup")
+@app.lifespan("startup")
 async def startup():
     with engine.connect() as conn:
         conn.execute(text("""
@@ -63,11 +63,13 @@ async def startup():
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS empresas (
                 id SERIAL PRIMARY KEY,
-                nome_fantasia VARCHAR(100) NOT NULL,
-                razao_social VARCHAR(100),
-                cnpj VARCHAR(20),
+                cnpj VARCHAR(20) NOT NULL,
+                razao_social VARCHAR(100) NOT NULL,
+                nome_fantasia VARCHAR(100),
+                email VARCHAR(100),
                 telefone VARCHAR(20),
-                email VARCHAR(100)
+                ativo INTEGER DEFAULT 1,
+                data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
 
