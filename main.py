@@ -47,7 +47,7 @@ def get_current_user(request: Request):
     return user
 
 
-@app.lifespan("startup")
+@app.on_event("startup")
 async def startup():
     with engine.connect() as conn:
         conn.execute(text("""
