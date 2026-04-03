@@ -142,10 +142,9 @@ async def login(request: Request, username: str = Form(...), password: str = For
         response.set_cookie(key="session_id", value=session_id, httponly=True)
         return response
 
-    return templates.TemplateResponse(
-        "login.html",
-        {"request": request, "error": "Credenciais Inválidas"}
-    )
+    return templates.TemplateResponse(request, "login.html", {
+        "error": "Credenciais Inválidas"
+    })
 
 
 @app.get("/logout")
@@ -198,8 +197,7 @@ async def dashboard(request: Request):
     labels = [d.nome_fantasia for d in dados_grafico]
     valores = [float(d.total) for d in dados_grafico]
 
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "dashboard.html", {
         "user": user,
         "total_produtos": float(total_produtos or 0),
         "total_vendas": total_vendas,
@@ -235,8 +233,7 @@ async def listar_produtos(request: Request):
             text("SELECT id, nome FROM fornecedores ORDER BY nome")
         ).fetchall()
 
-    return templates.TemplateResponse("produtos.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "produtos.html", {
         "user": user,
         "produtos": produtos,
         "empresas": empresas,
@@ -279,8 +276,7 @@ async def exibir_formulario_cadastro(request: Request):
             text("SELECT id, nome FROM fornecedores ORDER BY nome")
         ).fetchall()
 
-    return templates.TemplateResponse("cadastrar_produto.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "cadastrar_produto.html", {
         "empresas": empresas,
         "fornecedores": fornecedores
     })
@@ -306,8 +302,7 @@ async def editar_produto_page(request: Request, id: int):
             text("SELECT id, nome FROM fornecedores ORDER BY nome")
         ).fetchall()
 
-    return templates.TemplateResponse("editar_produto.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "editar_produto.html", {
         "user": user,
         "produto": produto,
         "empresas": empresas,
@@ -370,8 +365,7 @@ async def listar_usuarios(request: Request):
             text("SELECT id, username, perfil FROM usuarios ORDER BY id")
         ).fetchall()
 
-    return templates.TemplateResponse("usuarios.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "usuarios.html", {
         "user": user,
         "usuarios": usuarios
     })
@@ -473,8 +467,7 @@ async def listar_fornecedores(request: Request):
             text("SELECT * FROM fornecedores ORDER BY nome")
         ).fetchall()
 
-    return templates.TemplateResponse("fornecedores.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "fornecedores.html", {
         "user": user,
         "fornecedores": fornecedores
     })
@@ -527,8 +520,7 @@ async def pagina_vendas(request: Request):
             ORDER BY v.data_venda DESC
         """)).fetchall()
 
-    return templates.TemplateResponse("vendas.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "vendas.html", {
         "user": user,
         "produtos": produtos,
         "vendas": vendas
@@ -585,8 +577,7 @@ async def listar_empresas(request: Request):
             text("SELECT * FROM empresas ORDER BY nome_fantasia")
         ).fetchall()
 
-    return templates.TemplateResponse("empresas.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "empresas.html", {
         "user": user,
         "empresas": empresas
     })
@@ -643,8 +634,7 @@ async def editar_empresa_page(request: Request, id: int):
     if not empresa:
         return RedirectResponse(url="/empresas", status_code=303)
 
-    return templates.TemplateResponse("editar_empresa.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "editar_empresa.html", {
         "user": user,
         "empresa": empresa
     })
