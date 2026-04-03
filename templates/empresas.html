@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Empresas - Estoque MEI{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <h4 class="mb-0 fw-bold text-primary">
+	    <i class="fas fa-city me-2"></i>Empresas Cadastradas</h5>
+        <button class="btn btn-dark btn-sm shadow-sm" data-bs-toggle="modal" data-bs-target="#modalEmpresa">
+            <i class="fas fa-plus me-1"></i> Nova Empresa
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nome Fantasia</th>
+                        <th>CNPJ</th>
+                        <th>Contato</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in empresas %}
+                    <tr>
+                        <td class="fw-bold">{{ e.nome_fantasia }}</td>
+                        <td>{{ e.cnpj }}</td>
+                        <td>{{ e.email }}<br><small class="text-muted">{{ e.telefone }}</small></td>
+                        <td class="text-center">
+                            <a href="/empresas/editar/{{ e.id }}" class="btn btn-outline-primary btn-sm me-1">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <a href="/empresas/deletar/{{ e.id }}" class="btn btn-outline-danger btn-sm" onclick="return confirm('Excluir esta empresa?')">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-center py-4">Nenhuma empresa cadastrada.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalEmpresa" tabindex="-1">
+    <div class="modal-dialog">
+        <form action="/empresas/nova" method="POST" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cadastrar Empresa</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" name="nome" placeholder="Nome Fantasia" class="form-control mb-3" required>
+                <input type="text" name="razao_social" placeholder="Razão Social" class="form-control mb-3" required>
+                <input type="text" name="cnpj" placeholder="CNPJ" class="form-control mb-3">
+                <input type="text" name="tel" placeholder="Telefone" class="form-control mb-3">
+                <input type="email" name="email" placeholder="E-mail" class="form-control mb-3">
+            </div>
+            <div class="modal-footer">
+                <button type="submit" class="btn btn-success w-100">Salvar Empresa</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

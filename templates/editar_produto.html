@@ -1,0 +1,53 @@
+<style>
+    /* Isso força o estilo a funcionar agora */
+    .input-gestao {
+        width: 100% !important;
+        display: block !important;
+        padding: 12px !important;
+        margin-bottom: 15px !important;
+        border: 1px solid #ccc !important;
+        border-radius: 12px !important; /* Arredondado igual ao seu card */
+        box-sizing: border-box !important;
+    }
+    label {
+        display: block !important;
+        font-weight: bold;
+        margin-top: 10px;
+    }
+</style>
+
+{% extends "base.html" %}
+{% block content %}
+<div class="card p-4">
+  <h3>Editar Produto</h3>
+  <form action="/editar_produto/{{ produto.id }}" method="post">
+    
+    <label>Nome do Produto:</label>
+    <input type="text" name="nome" value="{{ produto.nome }}" class="input-gestao">
+
+    <label>Quantidade:</label>
+    <input type="number" name="quantidade" step="0.01" value="{{ produto.quantidade }}" class="input-gestao">
+
+    <label>Preço:</label>
+    <input type="number" name="preco" step="0.01" value="{{ produto.preco }}" class="input-gestao">
+
+    <label>Empresa:</label>
+    <select name="empresa_id" class="input-gestao">
+        {% for e in empresas %}
+            <option value="{{ e.id }}" {% if e.id == produto.empresa_id %}selected{% endif %}>{{ e.nome_fantasia }}</option>
+        {% endfor %}
+    </select>
+
+    <label for="fornecedor_id">Fornecedor:</label>
+      <select name="fornecedor_id" id="fornecedor_id" class="input-gestao">
+          {% for f in fornecedores %}
+          <option value="{{ f.id }}" {% if f.id == produto.fornecedor_id %}selected{% endif %}>
+            {{ f.nome }}
+          </option>
+          {% endfor %}
+      </select>
+
+    <button type="submit" class="btn btn-success w-100">Salvar Alterações</button>
+  </form>
+</div>
+{% endblock %}

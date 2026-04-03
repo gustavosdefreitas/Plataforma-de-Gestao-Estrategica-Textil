@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Fornecedores - Estoque MEI{% endblock %}
+
+{% block content %}
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+            <h4 class="mb-0 fw-bold text-primary">
+                <i class="fas fa-truck-loading me-2"></i>Gestão de Fornecedores</h4>
+            <button class="btn btn-dark btn-sm shadow-sm" data-bs-toggle="modal" data-bs-target="#modalNovoFornecedor">
+                <i class="fas fa-plus me-1"></i> Novo Fornecedor
+            </button>
+        </div>
+
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 30%;">Nome / Empresa</th>
+                            <th style="width: 20%;">CNPJ</th>
+                            <th style="width: 20%;">Telefone</th>
+                            <th style="width: 15%; text-align: center;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in fornecedores %}
+                        <tr>
+                            <td>
+                                <div class="fw-bold text-dark">{{ f.nome }}</div>
+                                <div class="small text-muted"><i class="far fa-envelope me-1"></i>{{ f.email or 'Sem e-mail' }}</div>
+                            </td>
+                            <td><span class="badge bg-light text-dark border">{{ f.cnpj or '---' }}</span></td>
+                            <td>{{ f.telefone or '---' }}</td>
+                            <td class="text-center">
+                                <button class="btn btn-outline-warning btn-sm me-1" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#modalEditarFornecedor{{ f.id }}"
+                                        title="Editar Fornecedor">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                
+                                <a href="/fornecedores/deletar/{{ f.id }}" 
+                                   class="btn btn-outline-danger btn-sm" 
+                                   onclick="return confirm('Tem certeza que deseja excluir o fornecedor {{ f.nome }}?')"
+                                   title="Excluir Fornecedor">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+                            </td>
+                        </tr>
+
+                        <div class="modal fade" id="modalEditarFornecedor{{ f.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content shadow-lg">
+                                    <form action="/fornecedores/editar/{{ f.id }}" method="POST">
+                                        <div class="modal-header bg-warning">
+                                            <h5 class="modal-title fw-bold text-dark"><i class="fas fa-user-edit me-2"></i>Editar Fornecedor</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body p-4 text-start">
+                                            <div class="mb-3">
+                                                <label class="form-label">Nome Fantasia / Razão Social</label>
+                                                <input type="text" name="nome" value="{{ f.nome }}" class="form-control" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">CNPJ</label>
+                                                <input type="text" name="cnpj" value="{{ f.cnpj or '' }}" class="form-control" placeholder="00.000.000/0000-00">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Telefone de Contato</label>
+                                                <input type="text" name="telefone" value="{{ f.telefone or '' }}" class="form-control" placeholder="(00) 00000-0000">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">E-mail</label>
+                                                <input type="email" name="email" value="{{ f.email or '' }}" class="form-control" placeholder="contato@fornecedor.com">
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer bg-light">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                            <button type="submit" class="btn btn-warning fw-bold">Salvar Alterações</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center py-5 text-muted">
+                                <i class="fas fa-info-circle me-2"></i>Nenhum fornecedor cadastrado.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalNovoFornecedor" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg">
+            <form action="/fornecedores/novo" method="POST">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-plus-circle me-2"></i>Novo Fornecedor</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-start">
+                    <div class="mb-3">
+                        <label class="form-label">Nome do Fornecedor</label>
+                        <input type="text" name="nome" class="form-control" placeholder="Ex: Tecidos Helena LTDA" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">CNPJ</label>
+                        <input type="text" name="cnpj" class="form-control" placeholder="00.000.000/0000-00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Telefone</label>
+                        <input type="text" name="telefone" class="form-control" placeholder="(00) 00000-0000">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">E-mail</label>
+                        <input type="email" name="email" class="form-control" placeholder="contato@fornecedor.com">
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary fw-bold">Cadastrar Fornecedor</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
