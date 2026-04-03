@@ -1,55 +1,150 @@
-from fastapi import FastAPI, Form, Request, Depends
+from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-import sqlite3
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
+from datetime import datetime
+from decimal import Decimal
+import os
 import hashlib
 import uuid
+import uvicorn
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# --- BANCO DE DADOS ---
-def get_db():
-    conn = sqlite3.connect('estoque.db')
-    conn.row_factory = sqlite3.Row
-    return conn
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-def hash_password(password):
+if DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
+else:
+    DATABASE_URL = "sqlite:///./estoque.db"
+
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args=connect_args)
+#, "postgresql://postgres:postgres@localhost:5432/estoque")
+# DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
+#engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+
+
+def hash_password(password: str):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# Auxiliar para verificar login em todas as rotas
+
 def get_current_user(request: Request):
     session_id = request.cookies.get("session_id")
     if not session_id:
         return None
-    conn = get_db()
-    user = conn.execute("SELECT * FROM usuarios WHERE session_id = ?", (session_id,)).fetchone()
-    conn.close()
+
+    with engine.connect() as conn:
+        user = conn.execute(
+            text("SELECT * FROM usuarios WHERE session_id = :sid"),
+            {"sid": session_id}
+        ).fetchone()
+
     return user
+
+
+@app.on_event("startup")
+async def startup():
+    with engine.connect() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                password VARCHAR(64) NOT NULL,
+                perfil VARCHAR(20) DEFAULT 'user',
+                session_id VARCHAR(36)
+            );
+        """))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS empresas (
+                id SERIAL PRIMARY KEY,
+                nome_fantasia VARCHAR(100) NOT NULL,
+                razao_social VARCHAR(100),
+                cnpj VARCHAR(20),
+                telefone VARCHAR(20),
+                email VARCHAR(100)
+            );
+        """))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS fornecedores (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(100) NOT NULL,
+                cnpj VARCHAR(20),
+                telefone VARCHAR(20),
+                email VARCHAR(100)
+            );
+        """))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS produtos (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(100) NOT NULL,
+                quantidade NUMERIC(10,2) DEFAULT 0,
+                preco NUMERIC(10,2) NOT NULL,
+                empresa_id INTEGER REFERENCES empresas(id) ON DELETE SET NULL,
+                fornecedor_id INTEGER REFERENCES fornecedores(id) ON DELETE SET NULL
+            );
+        """))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS vendas (
+                id SERIAL PRIMARY KEY,
+                produto_id INTEGER REFERENCES produtos(id) ON DELETE CASCADE,
+                quantidade NUMERIC(10,2) NOT NULL,
+                preco_unitario NUMERIC(10,2) NOT NULL,
+                total NUMERIC(10,2) NOT NULL,
+                data_venda TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+
+        conn.execute(text("""
+            INSERT INTO usuarios (username, password, perfil)
+            VALUES ('admin', :senha, 'admin')
+            ON CONFLICT (username) DO NOTHING
+        """), {"senha": hash_password("123456")})
+
+        conn.commit()
+
 
 # --- ROTAS DE AUTENTICAÇÃO ---
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
+
 @app.post("/login")
 async def login(request: Request, username: str = Form(...), password: str = Form(...)):
-    conn = get_db()
-    user = conn.execute("SELECT * FROM usuarios WHERE username = ?", (username,)).fetchone()
-    conn.close()
+    with engine.connect() as conn:
+        user = conn.execute(
+            text("SELECT * FROM usuarios WHERE username = :username"),
+            {"username": username}
+        ).fetchone()
 
-    if user and user['password'] == hash_password(password):
+    if user and user.password == hash_password(password):
         session_id = str(uuid.uuid4())
-        conn = get_db()
-        conn.execute("UPDATE usuarios SET session_id = ? WHERE id = ?", (session_id, user['id']))
-        conn.commit()
-        conn.close()
-        
+
+        with engine.connect() as conn:
+            conn.execute(
+                text("UPDATE usuarios SET session_id = :sid WHERE id = :id"),
+                {"sid": session_id, "id": user.id}
+            )
+            conn.commit()
+
         response = RedirectResponse(url="/", status_code=303)
         response.set_cookie(key="session_id", value=session_id, httponly=True)
         return response
-    
-    return templates.TemplateResponse("login.html", {"request": request, "error": "Credenciais Inválidas"})
+
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "error": "Credenciais Inválidas"}
+    )
+
 
 @app.get("/logout")
 async def logout():
@@ -57,50 +152,54 @@ async def logout():
     response.delete_cookie("session_id")
     return response
 
+
 # --- DASHBOARD ---
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     user = get_current_user(request)
-    if not user: return RedirectResponse(url="/login", status_code=303)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
 
-    conn = get_db()
-    # Dados para os cards
-    total_produtos = conn.execute("SELECT SUM(quantidade) FROM produtos").fetchone()[0] or 0
-    total_vendas = conn.execute("SELECT COUNT(*) FROM vendas").fetchone()[0]
-    total_empresas = conn.execute("SELECT COUNT(*) FROM empresas").fetchone()[0]
-    total_fornecedores = conn.execute("SELECT COUNT(*) FROM fornecedores").fetchone()[0]
+    with engine.connect() as conn:
+        total_produtos = conn.execute(
+            text("SELECT COALESCE(SUM(quantidade), 0) FROM produtos")
+        ).fetchone()[0]
 
-    # ANÁLISE DE DADOS: Busca quantidade de produtos por empresa para o GRÁFICO
-    # (Assume que você já vinculou a coluna empresa_id em produtos)
-    dados_grafico = conn.execute("""
-        SELECT e.nome_fantasia, SUM(p.quantidade) as total 
-        FROM produtos p 
-        JOIN empresas e ON p.empresa_id = e.id 
-        GROUP BY e.id
-    """).fetchall()
+        total_vendas = conn.execute(
+            text("SELECT COUNT(*) FROM vendas")
+        ).fetchone()[0]
 
-    dados_fornecedores = conn.execute("""
-        SELECT f.nome, COUNT(p.id)
-        FROM produtos p
-        JOIN fornecedores f ON p.fornecedor_id = f.id
-        GROUP BY f.nome
-    """).fetchall()
+        total_empresas = conn.execute(
+            text("SELECT COUNT(*) FROM empresas")
+        ).fetchone()[0]
 
-    # Prepara listas para o JavaScript ler
-    labels = [d['nome_fantasia'] for d in dados_grafico]
-    valores = [d['total'] for d in dados_grafico]
+        total_fornecedores = conn.execute(
+            text("SELECT COUNT(*) FROM fornecedores")
+        ).fetchone()[0]
 
-    vendas_recentes = conn.execute("""
-        SELECT v.*, p.nome FROM vendas v 
-        JOIN produtos p ON v.produto_id = p.id 
-        ORDER BY v.id DESC LIMIT 5
-    """).fetchall()
-    conn.close()
+        dados_grafico = conn.execute(text("""
+            SELECT e.nome_fantasia, COALESCE(SUM(p.quantidade), 0) AS total
+            FROM produtos p
+            JOIN empresas e ON p.empresa_id = e.id
+            GROUP BY e.id, e.nome_fantasia
+            ORDER BY e.nome_fantasia
+        """)).fetchall()
+
+        vendas_recentes = conn.execute(text("""
+            SELECT v.*, p.nome
+            FROM vendas v
+            JOIN produtos p ON v.produto_id = p.id
+            ORDER BY v.data_venda DESC
+            LIMIT 5
+        """)).fetchall()
+
+    labels = [d.nome_fantasia for d in dados_grafico]
+    valores = [float(d.total) for d in dados_grafico]
 
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "user": user,
-        "total_produtos": total_produtos,
+        "total_produtos": float(total_produtos or 0),
         "total_vendas": total_vendas,
         "total_empresas": total_empresas,
         "total_fornecedores": total_fornecedores,
@@ -109,358 +208,495 @@ async def dashboard(request: Request):
         "vendas_recentes": vendas_recentes
     })
 
+
 # --- PRODUTOS ---
 @app.get("/produtos", response_class=HTMLResponse)
 async def listar_produtos(request: Request):
     user = get_current_user(request)
-    if not user: return RedirectResponse(url="/login", status_code=303)
-    
-    conn = get_db()
-    
-    # 1. Busca produtos com os nomes de Empresa e Fornecedor para a TABELA
-    produtos = conn.execute("""
-        SELECT p.*, e.nome_fantasia AS empresa_nome, f.nome AS fornecedor_nome
-        FROM produtos p
-        LEFT JOIN empresas e ON p.empresa_id = e.id
-        LEFT JOIN fornecedores f ON p.fornecedor_id = f.id
-    """).fetchall()
-    
-    # 2. Busca empresas para o SELECT do Modal
-    empresas = conn.execute("SELECT id, nome_fantasia FROM empresas").fetchall()
-    
-    # 3. ADICIONE ESTA LINHA: Busca fornecedores para o SELECT do Modal
-    fornecedores = conn.execute("SELECT id, nome FROM fornecedores").fetchall()
-    
-    conn.close()
-    
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    with engine.connect() as conn:
+        produtos = conn.execute(text("""
+            SELECT p.*, e.nome_fantasia AS empresa_nome, f.nome AS fornecedor_nome
+            FROM produtos p
+            LEFT JOIN empresas e ON p.empresa_id = e.id
+            LEFT JOIN fornecedores f ON p.fornecedor_id = f.id
+            ORDER BY p.id DESC
+        """)).fetchall()
+
+        empresas = conn.execute(
+            text("SELECT id, nome_fantasia FROM empresas ORDER BY nome_fantasia")
+        ).fetchall()
+
+        fornecedores = conn.execute(
+            text("SELECT id, nome FROM fornecedores ORDER BY nome")
+        ).fetchall()
+
     return templates.TemplateResponse("produtos.html", {
-        "request": request, 
-        "user": user, 
-        "produtos": produtos, 
+        "request": request,
+        "user": user,
+        "produtos": produtos,
         "empresas": empresas,
-        "fornecedores": fornecedores  # NÃO ESQUEÇA DE ADICIONAR AQUI TAMBÉM
+        "fornecedores": fornecedores
     })
 
-#NOVO PRODUTO
+
 @app.post("/produtos/novo")
 async def novo_produto(
-    nome: str = Form(...), 
-    quantidade: float = Form(...), # Mudado para float para aceitar metros/decimais
-    preco: float = Form(...), 
+    nome: str = Form(...),
+    quantidade: float = Form(...),
+    preco: float = Form(...),
     empresa_id: int = Form(...),
-    fornecedor_id: int = Form(...) # Adicionado conforme o novo formulário
+    fornecedor_id: int = Form(...)
 ):
-    conn = get_db()
-    # Adicionamos o campo fornecedor_id na query SQL também
-    conn.execute("""
-        INSERT INTO produtos (nome, quantidade, preco, empresa_id, fornecedor_id) 
-        VALUES (?, ?, ?, ?, ?)
-    """, (nome, quantidade, preco, empresa_id, fornecedor_id))
-    
-    conn.commit()
-    conn.close()
+    with engine.connect() as conn:
+        conn.execute(text("""
+            INSERT INTO produtos (nome, quantidade, preco, empresa_id, fornecedor_id)
+            VALUES (:nome, :quantidade, :preco, :empresa_id, :fornecedor_id)
+        """), {
+            "nome": nome,
+            "quantidade": quantidade,
+            "preco": preco,
+            "empresa_id": empresa_id,
+            "fornecedor_id": fornecedor_id
+        })
+        conn.commit()
+
     return RedirectResponse(url="/produtos", status_code=303)
+
 
 @app.get("/produtos/novo")
 async def exibir_formulario_cadastro(request: Request):
-    conn = get_db()
-    # Buscamos os dados para preencher os menus de seleção (Dropdowns)
-    empresas = conn.execute("SELECT id, nome_fantasia FROM empresas").fetchall()
-    fornecedores = conn.execute("SELECT id, nome FROM fornecedores").fetchall()
-    conn.close()
-    
+    with engine.connect() as conn:
+        empresas = conn.execute(
+            text("SELECT id, nome_fantasia FROM empresas ORDER BY nome_fantasia")
+        ).fetchall()
+
+        fornecedores = conn.execute(
+            text("SELECT id, nome FROM fornecedores ORDER BY nome")
+        ).fetchall()
+
     return templates.TemplateResponse("cadastrar_produto.html", {
         "request": request,
         "empresas": empresas,
         "fornecedores": fornecedores
     })
 
-#EDITAR PRODUTO
+
 @app.get("/produtos/editar/{id}", response_class=HTMLResponse)
 async def editar_produto_page(request: Request, id: int):
     user = get_current_user(request)
-    if not user: return RedirectResponse(url="/login", status_code=303)
-    
-    conn = get_db()
-    # Busca o produto
-    produto = conn.execute("SELECT * FROM produtos WHERE id = ?", (id,)).fetchone()
-    # Busca todas as empresas para o SELECT
-    empresas = conn.execute("SELECT id, nome_fantasia FROM empresas").fetchall()
-    # Busca todos os fornecedores para o SELECT
-    fornecedores = conn.execute("SELECT id, nome FROM fornecedores").fetchall()
-    conn.close()
-    
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    with engine.connect() as conn:
+        produto = conn.execute(
+            text("SELECT * FROM produtos WHERE id = :id"),
+            {"id": id}
+        ).fetchone()
+
+        empresas = conn.execute(
+            text("SELECT id, nome_fantasia FROM empresas ORDER BY nome_fantasia")
+        ).fetchall()
+
+        fornecedores = conn.execute(
+            text("SELECT id, nome FROM fornecedores ORDER BY nome")
+        ).fetchall()
+
     return templates.TemplateResponse("editar_produto.html", {
-       "request": request, "user": user, "produto": produto,
-        "empresas": empresas, "fornecedores": fornecedores
+        "request": request,
+        "user": user,
+        "produto": produto,
+        "empresas": empresas,
+        "fornecedores": fornecedores
     })
+
 
 @app.post("/editar_produto/{id}")
 async def atualizar_produto(
     id: int,
-    nome: str = Form(...), 
-    quantidade: float = Form(...), # Mudamos de int para float aqui!
-    preco: float = Form(...), 
+    nome: str = Form(...),
+    quantidade: float = Form(...),
+    preco: float = Form(...),
     empresa_id: int = Form(...),
-    fornecedor_id: int = Form(...) # Adicionamos o fornecedor
+    fornecedor_id: int = Form(...)
 ):
-    conn = get_db() # Usando o seu nome de função correto
-    conn.execute("""
-        UPDATE produtos 
-        SET nome = ?, quantidade = ?, preco = ?, empresa_id = ?, fornecedor_id = ? 
-        WHERE id = ?
-    """, (nome, quantidade, preco, empresa_id, fornecedor_id, id))
-    conn.commit()
-    conn.close()
+    with engine.connect() as conn:
+        conn.execute(text("""
+            UPDATE produtos
+            SET nome = :nome,
+                quantidade = :quantidade,
+                preco = :preco,
+                empresa_id = :empresa_id,
+                fornecedor_id = :fornecedor_id
+            WHERE id = :id
+        """), {
+            "nome": nome,
+            "quantidade": quantidade,
+            "preco": preco,
+            "empresa_id": empresa_id,
+            "fornecedor_id": fornecedor_id,
+            "id": id
+        })
+        conn.commit()
+
     return RedirectResponse(url="/produtos", status_code=303)
 
-#DELETAR PRODUTO
+
 @app.get("/produtos/deletar/{id}")
 async def deletar_produto(id: int):
-    conn = get_db()
-    conn.execute("DELETE FROM produtos WHERE id = ?", (id,))
-    conn.commit()
-    conn.close()
+    with engine.connect() as conn:
+        conn.execute(
+            text("DELETE FROM produtos WHERE id = :id"),
+            {"id": id}
+        )
+        conn.commit()
+
     return RedirectResponse(url="/produtos", status_code=303)
 
-# --- GESTÃO DE USUÁRIOS ---
 
+# --- GESTÃO DE USUÁRIOS ---
 @app.get("/usuarios", response_class=HTMLResponse)
 async def listar_usuarios(request: Request):
     user = get_current_user(request)
-    # Proteção: Se não estiver logado ou não for admin, volta para o dashboard ou login
-    if not user: return RedirectResponse(url="/login", status_code=303)
-    
-    conn = get_db()
-    # Pega os usuários e converte para uma lista de dicionários real
-    cursor = conn.execute("SELECT id, username, perfil FROM usuarios")
-    lista_limpa = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
+    if not user or user.perfil != "admin":
+        return RedirectResponse(url="/login", status_code=303)
+
+    with engine.connect() as conn:
+        usuarios = conn.execute(
+            text("SELECT id, username, perfil FROM usuarios ORDER BY id")
+        ).fetchall()
+
     return templates.TemplateResponse("usuarios.html", {
-    "request": request,
-    "user": dict(user),
-    "usuarios": lista_limpa
+        "request": request,
+        "user": user,
+        "usuarios": usuarios
     })
 
+
 @app.post("/usuarios/novo")
-async def novo_usuario(request: Request, username: str = Form(...), password: str = Form(...), perfil: str = Form(...)):
+async def novo_usuario(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    perfil: str = Form(...)
+):
     user = get_current_user(request)
-    if not user or user['perfil'] != 'admin':
+    if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
 
-    conn = get_db()
     try:
-        conn.execute("INSERT INTO usuarios (username, password, perfil) VALUES (?, ?, ?)",
-                     (username, hash_password(password), perfil))
-        conn.commit()
-    except sqlite3.IntegrityError:
-        # Caso o nome de utilizador já exista
-        pass 
-    finally:
-        conn.close()
-    
+        with engine.connect() as conn:
+            conn.execute(text("""
+                INSERT INTO usuarios (username, password, perfil)
+                VALUES (:username, :password, :perfil)
+            """), {
+                "username": username,
+                "password": hash_password(password),
+                "perfil": perfil
+            })
+            conn.commit()
+    except IntegrityError:
+        pass
+
     return RedirectResponse(url="/usuarios", status_code=303)
+
 
 @app.get("/usuarios/deletar/{id}")
 async def deletar_usuario(request: Request, id: int):
     user = get_current_user(request)
-    # Impede que um admin se apague a si próprio (importante!)
-    if user and user['perfil'] == 'admin' and user['id'] != id:
-        conn = get_db()
-        conn.execute("DELETE FROM usuarios WHERE id = ?", (id,))
-        conn.commit()
-        conn.close()
-    
+    if user and user.perfil == "admin" and user.id != id:
+        with engine.connect() as conn:
+            conn.execute(
+                text("DELETE FROM usuarios WHERE id = :id"),
+                {"id": id}
+            )
+            conn.commit()
+
     return RedirectResponse(url="/usuarios", status_code=303)
 
-# ROTA PARA EXIBIR O FORMULÁRIO DE EDIÇÃO DE USUÁRIO
+
 @app.post("/usuarios/editar/{user_id}")
-async def editar_usuario(user_id: int, request: Request, username: str = Form(...), perfil: str = Form(...), password: str = Form(None)):
+async def editar_usuario(
+    user_id: int,
+    request: Request,
+    username: str = Form(...),
+    perfil: str = Form(...),
+    password: str = Form(None)
+):
     user = get_current_user(request)
-    if not user or user['perfil'] != 'admin':
+    if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
 
-    conn = get_db()
-    # Se a senha for fornecida, atualiza ela também
-    if password:
-        conn.execute("""
-            UPDATE usuarios 
-            SET username = ?, perfil = ?, password = ? 
-            WHERE id = ?
-        """, (username, perfil, hash_password(password), user_id))
-    else:
-        conn.execute("""
-            UPDATE usuarios 
-            SET username = ?, perfil = ? 
-            WHERE id = ?
-        """, (username, perfil, user_id))
-    
-    conn.commit()
-    conn.close()
-    
+    with engine.connect() as conn:
+        if password:
+            conn.execute(text("""
+                UPDATE usuarios
+                SET username = :username,
+                    perfil = :perfil,
+                    password = :password
+                WHERE id = :id
+            """), {
+                "username": username,
+                "perfil": perfil,
+                "password": hash_password(password),
+                "id": user_id
+            })
+        else:
+            conn.execute(text("""
+                UPDATE usuarios
+                SET username = :username,
+                    perfil = :perfil
+                WHERE id = :id
+            """), {
+                "username": username,
+                "perfil": perfil,
+                "id": user_id
+            })
+        conn.commit()
+
     return RedirectResponse(url="/usuarios", status_code=303)
 
-#FORNECEDORES 
+
+# --- FORNECEDORES ---
 @app.get("/fornecedores", response_class=HTMLResponse)
 async def listar_fornecedores(request: Request):
     user = get_current_user(request)
-    if not user: return RedirectResponse(url="/login", status_code=303)
-    
-    conn = get_db()
-    fornecedores = conn.execute("SELECT * FROM fornecedores").fetchall()
-    conn.close()
-    return templates.TemplateResponse("fornecedores.html", {"request": request, "user": user, "fornecedores": fornecedores})
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
 
-#EDITAR FORNECEDOR
+    with engine.connect() as conn:
+        fornecedores = conn.execute(
+            text("SELECT * FROM fornecedores ORDER BY nome")
+        ).fetchall()
+
+    return templates.TemplateResponse("fornecedores.html", {
+        "request": request,
+        "user": user,
+        "fornecedores": fornecedores
+    })
+
+
 @app.post("/fornecedores/editar/{id}")
 async def editar_fornecedor(
-    id: int, 
-    nome: str = Form(...), 
-    cnpj: str = Form(None), 
-    telefone: str = Form(None), 
+    id: int,
+    nome: str = Form(...),
+    cnpj: str = Form(None),
+    telefone: str = Form(None),
     email: str = Form(None)
 ):
-    conn = get_db()
-    conn.execute("""
-        UPDATE fornecedores 
-        SET nome = ?, cnpj = ?, telefone = ?, email = ? 
-        WHERE id = ?
-    """, (nome, cnpj, telefone, email, id))
-    
-    conn.commit()
-    conn.close()
-    
+    with engine.connect() as conn:
+        conn.execute(text("""
+            UPDATE fornecedores
+            SET nome = :nome,
+                cnpj = :cnpj,
+                telefone = :telefone,
+                email = :email
+            WHERE id = :id
+        """), {
+            "nome": nome,
+            "cnpj": cnpj,
+            "telefone": telefone,
+            "email": email,
+            "id": id
+        })
+        conn.commit()
+
     return RedirectResponse(url="/fornecedores", status_code=303)
 
-# ROTA PARA ABRIR A PÁGINA DE VENDAS (O que o botão do menu chama)
+
+# --- VENDAS ---
 @app.get("/vendas", response_class=HTMLResponse)
 async def pagina_vendas(request: Request):
     user = get_current_user(request)
-    if not user: 
+    if not user:
         return RedirectResponse(url="/login", status_code=303)
-    
-    conn = get_db()
-    # Pega produtos que tenham estoque para vender
-    produtos = conn.execute("SELECT * FROM produtos WHERE quantidade > 0").fetchall()
-    # Pega o histórico de vendas unindo com a tabela de produtos para saber o nome
-    vendas = conn.execute("""
-        SELECT v.*, p.nome 
-        FROM vendas v 
-        JOIN produtos p ON v.produto_id = p.id 
-        ORDER BY v.data DESC
-    """).fetchall()
-    conn.close()
-    
+
+    with engine.connect() as conn:
+        produtos = conn.execute(
+            text("SELECT * FROM produtos WHERE quantidade > 0 ORDER BY nome")
+        ).fetchall()
+
+        vendas = conn.execute(text("""
+            SELECT v.*, p.nome
+            FROM vendas v
+            JOIN produtos p ON v.produto_id = p.id
+            ORDER BY v.data_venda DESC
+        """)).fetchall()
+
     return templates.TemplateResponse("vendas.html", {
-        "request": request, 
-        "user": user, 
-        "produtos": produtos, 
+        "request": request,
+        "user": user,
+        "produtos": produtos,
         "vendas": vendas
     })
 
-# ROTA PARA PROCESSAR O FORMULÁRIO (O que o botão "Finalizar Venda" chama)
+
 @app.post("/vendas/nova")
-async def registrar_venda(produto_id: int = Form(...), qtd_venda: int = Form(...)):
-    conn = get_db()
-    prod = conn.execute("SELECT quantidade, preco FROM produtos WHERE id = ?", (produto_id,)).fetchone()
-    
-    if prod and prod['quantidade'] >= qtd_venda:
-        total = qtd_venda * prod['preco']
-        conn.execute("INSERT INTO vendas (produto_id, quantidade, preco_unitario, total) VALUES (?, ?, ?, ?)",
-                     (produto_id, qtd_venda, prod['preco'], total))
-        conn.execute("UPDATE produtos SET quantidade = quantidade - ? WHERE id = ?", (qtd_venda, produto_id))
-        conn.commit()
-    
-    conn.close()
+async def registrar_venda(produto_id: int = Form(...), qtd_venda: float = Form(...)):
+    with engine.connect() as conn:
+        prod = conn.execute(
+            text("SELECT quantidade, preco FROM produtos WHERE id = :id"),
+            {"id": produto_id}
+        ).fetchone()
+
+        if prod and float(prod.quantidade) >= qtd_venda:
+            preco_unitario = float(prod.preco)
+            total = qtd_venda * preco_unitario
+            data_venda = datetime.now()
+
+            conn.execute(text("""
+                INSERT INTO vendas (produto_id, quantidade, preco_unitario, total, data_venda)
+                VALUES (:produto_id, :quantidade, :preco_unitario, :total, :data_venda)
+            """), {
+                "produto_id": produto_id,
+                "quantidade": qtd_venda,
+                "preco_unitario": preco_unitario,
+                "total": total,
+                "data_venda": data_venda
+            })
+
+            conn.execute(text("""
+                UPDATE produtos
+                SET quantidade = quantidade - :qtd
+                WHERE id = :id
+            """), {
+                "qtd": qtd_venda,
+                "id": produto_id
+            })
+
+            conn.commit()
+
     return RedirectResponse(url="/vendas", status_code=303)
 
-#GERENCIAR EMPRESAS
+
+# --- EMPRESAS ---
 @app.get("/empresas", response_class=HTMLResponse)
 async def listar_empresas(request: Request):
     user = get_current_user(request)
-    if not user or user['perfil'] != 'admin':
+    if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
-    
-    conn = get_db()
-    empresas = conn.execute("SELECT * FROM empresas ORDER BY nome_fantasia").fetchall()
-    conn.close()
-    return templates.TemplateResponse("empresas.html", {"request": request, "user": user, "empresas": empresas})
+
+    with engine.connect() as conn:
+        empresas = conn.execute(
+            text("SELECT * FROM empresas ORDER BY nome_fantasia")
+        ).fetchall()
+
+    return templates.TemplateResponse("empresas.html", {
+        "request": request,
+        "user": user,
+        "empresas": empresas
+    })
+
 
 @app.post("/empresas/nova")
 async def nova_empresa(
-    nome: str = Form(...), 
-    razao_social: str = Form(...), # Novo campo adicionado aqui
-    cnpj: str = Form(...), 
-    tel: str = Form(...), 
+    nome: str = Form(...),
+    razao_social: str = Form(...),
+    cnpj: str = Form(...),
+    tel: str = Form(...),
     email: str = Form(...)
 ):
-    conn = get_db()
-    # Adicione a razao_social no INSERT
-    conn.execute("""
-        INSERT INTO empresas (nome_fantasia, razao_social, cnpj, telefone, email) 
-        VALUES (?, ?, ?, ?, ?)
-    """, (nome, razao_social, cnpj, tel, email))
-    conn.commit()
-    conn.close()
+    with engine.connect() as conn:
+        conn.execute(text("""
+            INSERT INTO empresas (nome_fantasia, razao_social, cnpj, telefone, email)
+            VALUES (:nome, :razao_social, :cnpj, :telefone, :email)
+        """), {
+            "nome": nome,
+            "razao_social": razao_social,
+            "cnpj": cnpj,
+            "telefone": tel,
+            "email": email
+        })
+        conn.commit()
+
     return RedirectResponse(url="/empresas", status_code=303)
+
 
 @app.get("/empresas/deletar/{id}")
 async def deletar_empresa(id: int):
-    conn = get_db()
-    conn.execute("DELETE FROM empresas WHERE id = ?", (id,))
-    conn.commit()
-    conn.close()
+    with engine.connect() as conn:
+        conn.execute(
+            text("DELETE FROM empresas WHERE id = :id"),
+            {"id": id}
+        )
+        conn.commit()
+
     return RedirectResponse(url="/empresas", status_code=303)
+
 
 @app.get("/empresas/editar/{id}", response_class=HTMLResponse)
 async def editar_empresa_page(request: Request, id: int):
     user = get_current_user(request)
-    if not user or user['perfil'] != 'admin':
+    if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
-    
-    conn = get_db()
-    empresa = conn.execute("SELECT * FROM empresas WHERE id = ?", (id,)).fetchone()
-    conn.close()
-    
+
+    with engine.connect() as conn:
+        empresa = conn.execute(
+            text("SELECT * FROM empresas WHERE id = :id"),
+            {"id": id}
+        ).fetchone()
+
     if not empresa:
         return RedirectResponse(url="/empresas", status_code=303)
-        
+
     return templates.TemplateResponse("editar_empresa.html", {
-        "request": request, 
-        "user": user, 
+        "request": request,
+        "user": user,
         "empresa": empresa
     })
 
+
 @app.post("/empresas/editar/{id}")
 async def atualizar_empresa(
-    id: int, 
-    nome: str = Form(...), 
-    cnpj: str = Form(...), 
-    tel: str = Form(...), 
+    id: int,
+    nome: str = Form(...),
+    cnpj: str = Form(...),
+    tel: str = Form(...),
     email: str = Form(...)
 ):
-    conn = get_db()
-    conn.execute("""
-        UPDATE empresas 
-        SET nome_fantasia = ?, cnpj = ?, telefone = ?, email = ? 
-        WHERE id = ?
-    """, (nome, cnpj, tel, email, id))
-    conn.commit()
-    conn.close()
+    with engine.connect() as conn:
+        conn.execute(text("""
+            UPDATE empresas
+            SET nome_fantasia = :nome,
+                cnpj = :cnpj,
+                telefone = :telefone,
+                email = :email
+            WHERE id = :id
+        """), {
+            "nome": nome,
+            "cnpj": cnpj,
+            "telefone": tel,
+            "email": email,
+            "id": id
+        })
+        conn.commit()
+
     return RedirectResponse(url="/empresas", status_code=303)
 
-# Endpoint de API (Uso e Fornecimento de API)
+
+# --- API ---
 @app.get("/api/produtos/{empresa_id}")
 async def api_listar_produtos(empresa_id: int):
-    conn = get_db()
-    produtos = conn.execute("SELECT nome, quantidade, preco FROM produtos WHERE empresa_id = ?", (empresa_id,)).fetchall()
-    conn.close()
-    # Retorna um JSON puro, o que caracteriza uma API
-    return {"empresa_id": empresa_id, "estoque": [dict(p) for p in produtos]}
+    with engine.connect() as conn:
+        produtos = conn.execute(text("""
+            SELECT nome, quantidade, preco
+            FROM produtos
+            WHERE empresa_id = :empresa_id
+            ORDER BY nome
+        """), {"empresa_id": empresa_id}).fetchall()
+
+    estoque = []
+    for p in produtos:
+        estoque.append({
+            "nome": p.nome,
+            "quantidade": float(p.quantidade) if isinstance(p.quantidade, Decimal) else p.quantidade,
+            "preco": float(p.preco) if isinstance(p.preco, Decimal) else p.preco
+        })
+
+    return {"empresa_id": empresa_id, "estoque": estoque}
+
 
 if __name__ == "__main__":
-    import uvicorn
-    # host="0.0.0.0" permite que dispositivos externos acessem
-    # port=8000 é a porta padrão, você pode mudar se desejar
     uvicorn.run(app, host="0.0.0.0", port=8000)
