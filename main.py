@@ -17,14 +17,12 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL não configurada.")
     
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/test_db")
 DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
-
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-
 
 def hash_password(password: str):
     return hashlib.sha256(password.encode()).hexdigest()
-
 
 def get_current_user(request: Request):
     session_id = request.cookies.get("session_id")
