@@ -14,16 +14,12 @@ import uvicorn
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-if DATABASE_URL:
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
-else:
-    DATABASE_URL = "sqlite:///./estoque.db"
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL não configurada.")
+    
+DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
 
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args=connect_args)
-#, "postgresql://postgres:postgres@localhost:5432/estoque")
-# DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
-#engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 
 def hash_password(password: str):
@@ -97,7 +93,7 @@ async def lifespan(app: FastAPI):
                 quantidade NUMERIC(10,2) NOT NULL,
                 preco_unitario NUMERIC(10,2) NOT NULL,
                 total NUMERIC(10,2) NOT NULL,
-                data_venda TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                data TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
 
@@ -538,17 +534,17 @@ async def registrar_venda(produto_id: int = Form(...), qtd_venda: float = Form(.
         if prod and float(prod.quantidade) >= qtd_venda:
             preco_unitario = float(prod.preco)
             total = qtd_venda * preco_unitario
-            data_venda = datetime.now()
+            data = datetime.now()
 
             conn.execute(text("""
-                INSERT INTO vendas (produto_id, quantidade, preco_unitario, total, data_venda)
-                VALUES (:produto_id, :quantidade, :preco_unitario, :total, :data_venda)
+                INSERT INTO vendas (produto_id, quantidade, preco_unitario, total, data)
+                VALUES (:produto_id, :quantidade, :preco_unitario, :total, :data)
             """), {
                 "produto_id": produto_id,
                 "quantidade": qtd_venda,
                 "preco_unitario": preco_unitario,
                 "total": total,
-                "data_venda": data_venda
+                "data": data
             })
 
             conn.execute(text("""
