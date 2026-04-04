@@ -20,7 +20,7 @@
 {% block content %}
 <div class="card p-4">
   <h3>Editar Produto</h3>
-  <form action="/editar_produto/{{ produto.id }}" method="post">
+  <form action="/produtos/editar/{{ produto.id }}" method="post">
     
     <label>Nome do Produto:</label>
     <input type="text" name="nome" value="{{ produto.nome }}" class="input-gestao">
