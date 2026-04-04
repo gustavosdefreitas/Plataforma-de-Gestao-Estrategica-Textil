@@ -39,9 +39,34 @@ def get_current_user(request: Request):
 
     return user
 
+def registrar_log(usuario_id, username, acao, detalhes=None):
+    with engine.connect() as conn:
+        conn.execute(text("""
+            INSERT INTO logs_sistema (usuario_id, username, acao, detalhes)
+            VALUES (:usuario_id, :username, :acao, :detalhes)
+        """), {
+            "usuario_id": usuario_id,
+            "username": username,
+            "acao": acao,
+            "detalhes": detalhes
+        })
+        conn.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     with engine.connect() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS logs_sistema (
+                id SERIAL PRIMARY KEY,
+                usuario_id INTEGER,
+                username VARCHAR(50),
+                acao VARCHAR(100) NOT NULL,
+                detalhes TEXT,
+                data_evento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id SERIAL PRIMARY KEY,
@@ -112,6 +137,7 @@ app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+
 # --- ROTAS DE AUTENTICAÇÃO ---
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -134,6 +160,8 @@ async def login(request: Request, username: str = Form(...), password: str = For
                 {"sid": session_id, "id": user.id}
             )
             conn.commit()
+
+        registrar_log(user.id, user.username, "LOGIN", "Usuário entrou no sistema")
 
         response = RedirectResponse(url="/", status_code=303)
         response.set_cookie(key="session_id", value=session_id, httponly=True)
@@ -241,6 +269,7 @@ async def listar_produtos(request: Request):
 
 @app.post("/produtos/novo")
 async def novo_produto(
+    request: Request,
     nome: str = Form(...),
     quantidade: float = Form(...),
     preco: float = Form(...),
@@ -249,6 +278,10 @@ async def novo_produto(
     cor: str = Form(None),
     tamanho: str = Form(None),
 ):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     with engine.connect() as conn:
         conn.execute(text("""
             INSERT INTO produtos (nome, quantidade, preco, empresa_id, fornecedor_id, cor, tamanho)
@@ -263,6 +296,8 @@ async def novo_produto(
             "tamanho": tamanho,
         })
         conn.commit()
+
+    registrar_log(user.id, user.username, "CADASTRO_PRODUTO", f"Produto: {nome}, cor: {cor}, tamanho: {tamanho}")
 
     return RedirectResponse(url="/produtos", status_code=303)
 
@@ -473,7 +508,6 @@ async def listar_fornecedores(request: Request):
         "fornecedores": fornecedores
     })
 
-
 @app.post("/fornecedores/editar/{id}")
 async def editar_fornecedor(
     id: int,
@@ -522,6 +556,7 @@ async def novo_fornecedor(
 
     return RedirectResponse(url="/fornecedores", status_code=303)
 
+
 # --- VENDAS ---
 @app.get("/vendas", response_class=HTMLResponse)
 async def pagina_vendas(request: Request):
@@ -550,9 +585,12 @@ async def pagina_vendas(request: Request):
         "vendas": vendas
     })
 
-
 @app.post("/vendas/nova")
-async def registrar_venda(produto_id: int = Form(...), qtd_venda: float = Form(...)):
+async def registrar_venda(request: Request, produto_id: int = Form(...), qtd_venda: float = Form(...)):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    
     with engine.connect() as conn:
         prod = conn.execute(
             text("SELECT quantidade, preco FROM produtos WHERE id = :id"),
@@ -586,6 +624,13 @@ async def registrar_venda(produto_id: int = Form(...), qtd_venda: float = Form(.
 
             conn.commit()
 
+            registrar_log(
+                user.id,
+                user.username,
+                "VENDA",
+                f"Produto: {prod.nome}, cor: {prod.cor}, tamanho: {prod.tamanho}, qtd: {qtd_venda}, total: {total}"
+            )
+
     return RedirectResponse(url="/vendas", status_code=303)
 
 
@@ -605,7 +650,6 @@ async def listar_empresas(request: Request):
         "user": user,
         "empresas": empresas
     })
-
 
 @app.post("/empresas/nova")
 async def nova_empresa(
@@ -630,7 +674,6 @@ async def nova_empresa(
 
     return RedirectResponse(url="/empresas", status_code=303)
 
-
 @app.get("/empresas/deletar/{id}")
 async def deletar_empresa(id: int):
     with engine.connect() as conn:
@@ -641,7 +684,6 @@ async def deletar_empresa(id: int):
         conn.commit()
 
     return RedirectResponse(url="/empresas", status_code=303)
-
 
 @app.get("/empresas/editar/{id}", response_class=HTMLResponse)
 async def editar_empresa_page(request: Request, id: int):
@@ -662,7 +704,6 @@ async def editar_empresa_page(request: Request, id: int):
         "user": user,
         "empresa": empresa
     })
-
 
 @app.post("/empresas/editar/{id}")
 async def atualizar_empresa(
@@ -690,6 +731,27 @@ async def atualizar_empresa(
         conn.commit()
 
     return RedirectResponse(url="/empresas", status_code=303)
+
+
+# --- LOGS SOMENTE ADMIN ---
+@app.get("/logs", response_class=HTMLResponse)
+async def listar_logs(request: Request):
+    user = get_current_user(request)
+    if not user or user.perfil != "admin":
+        return RedirectResponse(url="/", status_code=303)
+
+    with engine.connect() as conn:
+        logs = conn.execute(text("""
+            SELECT *
+            FROM logs_sistema
+            ORDER BY data_evento DESC
+            LIMIT 200
+        """)).fetchall()
+
+    return templates.TemplateResponse(request, "logs.html", {
+        "user": user,
+        "logs": logs
+    })
 
 
 # --- API ---
