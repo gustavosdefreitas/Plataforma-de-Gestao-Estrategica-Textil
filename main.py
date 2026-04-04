@@ -593,14 +593,14 @@ async def registrar_venda(request: Request, produto_id: int = Form(...), qtd_ven
     
     with engine.connect() as conn:
         prod = conn.execute(
-            text("SELECT quantidade, preco FROM produtos WHERE id = :id"),
+            text("SELECT nome, cor, tamanho, quantidade, preco, FROM produtos WHERE id = :id"),
             {"id": produto_id}
         ).fetchone()
 
         if prod and float(prod.quantidade) >= qtd_venda:
             preco_unitario = float(prod.preco)
             total = qtd_venda * preco_unitario
-            data_venda = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            data_venda = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
 
             conn.execute(text("""
                 INSERT INTO vendas (produto_id, quantidade, preco_unitario, total, data_venda)
