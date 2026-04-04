@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Sistema de Estoque{% endblock %}
+{% block title %}Dashboard - Plataforma de Gestão{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
@@ -41,7 +41,7 @@
             <div class="card-body d-flex flex-column justify-content-center text-center">
                 <i class="fas fa-chart-line fa-3x mb-3"></i>
                 <h4>Análise de Giro</h4>
-                <p>O gráfico ao lado reflete a distribuição atual de mercadorias entre suas filiais/empresas.</p>
+                <p>O gráfico ao lado reflete a distribuição atual de mercadorias entre as empresas.</p>
             </div>
         </div>
     </div>
@@ -123,15 +123,15 @@
                             <tr>
                                 <td>{{ venda.data_venda }}</td>
                                 <td>{{ venda.nome }}
-                                    {% if venda.cor %}<br><small>Cor: {{ venda.cor }}</small>{% endif %}
-                                    {% if venda.tamanho %}<br><small>Tamanho: {{ venda.tamanho }}</small>{% endif %}
+                                <td>{{ venda.cor or '-' }}</td>
+                                <td>{{ venda.tamanho or '-' }}</td>
                                 </td>
                                 <td>{{ venda.quantidade }}</td>
                                 <td class="text-success fw-bold">R$ {{ "%.2f"|format(venda.total) }}</td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="4" class="text-center text-muted py-4">Nenhuma venda registrada ainda.</td>
+                                <td colspan="6" class="text-center text-muted py-4">Nenhuma venda registrada ainda.</td>
                             </tr>
                             {% endfor %}
                         </tbody>

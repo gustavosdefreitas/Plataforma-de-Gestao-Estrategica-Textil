@@ -52,6 +52,8 @@
                             <tr>
                                 <th class="ps-3">Data/Hora</th>
                                 <th>Produto</th>
+                                <th>Cor</th>
+                                <th>Tamanho</th>
                                 <th>Qtd</th>
                                 <th>Preço Unit.</th>
                                 <th>Total</th>
@@ -62,13 +64,15 @@
                             <tr>
                                 <td class="ps-3 small text-muted">{{ v.data_venda }}</td>
                                 <td class="fw-bold">{{ v.nome }}</td>
+                                <td>{{ v.cor or '-' }}</td>
+                                <td>{{ v.tamanho or '-' }}</td>
                                 <td>{{ v.quantidade }}</td>
                                 <td>R$ {{ "%.2f"|format(v.preco_unitario) }}</td>
                                 <td class="text-success fw-bold">R$ {{ "%.2f"|format(v.total) }}</td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="5" class="text-center py-5 text-muted">
+                                <td colspan="7" class="text-center py-5 text-muted">
                                     <i class="fas fa-info-circle me-1"></i> Nenhuma venda realizada ainda.
                                 </td>
                             </tr>

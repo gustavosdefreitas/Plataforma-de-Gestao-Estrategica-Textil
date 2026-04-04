@@ -5,12 +5,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from decimal import Decimal
 import os
 import hashlib
 import uuid
 import uvicorn
+
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
@@ -115,7 +117,6 @@ templates = Jinja2Templates(directory="templates")
 async def login_page(request: Request):
     return templates.TemplateResponse(request, "login.html", {})
 
-
 @app.post("/login")
 async def login(request: Request, username: str = Form(...), password: str = Form(...)):
     with engine.connect() as conn:
@@ -141,7 +142,6 @@ async def login(request: Request, username: str = Form(...), password: str = For
     return templates.TemplateResponse(request, "login.html", {
         "error": "Credenciais Inválidas"
     })
-
 
 @app.get("/logout")
 async def logout():
@@ -176,22 +176,25 @@ async def dashboard(request: Request):
 
         dados_grafico = conn.execute(text("""
             SELECT e.nome_fantasia, COALESCE(SUM(p.quantidade), 0) AS total
-            FROM produtos p
-            JOIN empresas e ON p.empresa_id = e.id
+            FROM empresas e
+            LEFT JOIN produtos p ON p.empresa_id = e.id
             GROUP BY e.id, e.nome_fantasia
             ORDER BY e.nome_fantasia
         """)).fetchall()
 
+        labels = [d.nome_fantasia for d in dados_grafico]
+        valores = [float(d.total) for d in dados_grafico]
+
         vendas_recentes = conn.execute(text("""
-            SELECT v.*, p.nome
+            SELECT v.data_venda, v.quantidade, v.total, p.nome, p.cor, p.tamanho
             FROM vendas v
             JOIN produtos p ON v.produto_id = p.id
             ORDER BY v.data_venda DESC
             LIMIT 5
         """)).fetchall()
 
-    labels = [d.nome_fantasia for d in dados_grafico]
-    valores = [float(d.total) for d in dados_grafico]
+   # labels = [d.nome_fantasia for d in dados_grafico]
+   # valores = [float(d.total) for d in dados_grafico]
 
     return templates.TemplateResponse(request, "dashboard.html", {
         "user": user,
@@ -236,7 +239,6 @@ async def listar_produtos(request: Request):
         "fornecedores": fornecedores
     })
 
-
 @app.post("/produtos/novo")
 async def novo_produto(
     nome: str = Form(...),
@@ -264,7 +266,6 @@ async def novo_produto(
 
     return RedirectResponse(url="/produtos", status_code=303)
 
-
 @app.get("/produtos/novo")
 async def exibir_formulario_cadastro(request: Request):
     with engine.connect() as conn:
@@ -280,7 +281,6 @@ async def exibir_formulario_cadastro(request: Request):
         "empresas": empresas,
         "fornecedores": fornecedores
     })
-
 
 @app.get("/produtos/editar/{id}", response_class=HTMLResponse)
 async def editar_produto_page(request: Request, id: int):
@@ -308,7 +308,6 @@ async def editar_produto_page(request: Request, id: int):
         "empresas": empresas,
         "fornecedores": fornecedores
     })
-
 
 @app.post("/produtos/editar/{id}")
 async def editar_produto(
@@ -346,7 +345,6 @@ async def editar_produto(
 
     return RedirectResponse(url="/produtos", status_code=303)
 
-
 @app.get("/produtos/deletar/{id}")
 async def deletar_produto(id: int):
     with engine.connect() as conn:
@@ -376,7 +374,6 @@ async def listar_usuarios(request: Request):
         "usuarios": usuarios
     })
 
-
 @app.post("/usuarios/novo")
 async def novo_usuario(
     request: Request,
@@ -404,7 +401,6 @@ async def novo_usuario(
 
     return RedirectResponse(url="/usuarios", status_code=303)
 
-
 @app.get("/usuarios/deletar/{id}")
 async def deletar_usuario(request: Request, id: int):
     user = get_current_user(request)
@@ -417,7 +413,6 @@ async def deletar_usuario(request: Request, id: int):
             conn.commit()
 
     return RedirectResponse(url="/usuarios", status_code=303)
-
 
 @app.post("/usuarios/editar/{user_id}")
 async def editar_usuario(
