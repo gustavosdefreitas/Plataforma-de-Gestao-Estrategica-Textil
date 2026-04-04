@@ -14,14 +14,14 @@
                     <div class="mb-3">
                         <label class="form-label fw-bold">Selecionar Produto</label>
                         <select name="produto_id" class="form-select" required>
-                            <option value="" selected disabled>Escolha um produto...</option>
-                            {% for p in produtos %}
+                            <option value="">Escolha um produto...</option>
+                            {% for produto in produtos %}
                                 <option value="{{ produto.id }}">
                                     {{ produto.nome }}
                                     {% if produto.cor %} - Cor: {{ produto.cor }}{% endif %}
-                                    {% if produto.tamanho %} - Tam: {{ produto.tamanho }}{% endif %}
+                                    {% if produto.tamanho %} - Tam: {{ produto.tamanho }}{% endif %} 
                                     - Estoque: {{ produto.quantidade }}
-        </option>
+                                </option>
                             {% endfor %}
                         </select>
                         <div class="form-text">Apenas produtos com stock aparecem aqui.</div>
