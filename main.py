@@ -593,7 +593,7 @@ async def registrar_venda(request: Request, produto_id: int = Form(...), qtd_ven
     
     with engine.connect() as conn:
         prod = conn.execute(
-            text("""SELECT nome, cor, tamanho, quantidade, preco, FROM produtos WHERE id = :id"""),
+            text("""SELECT nome, cor, tamanho, quantidade, preco FROM produtos WHERE id = :id"""),
             {"id": produto_id}
         ).fetchone()
 
