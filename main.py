@@ -535,12 +535,15 @@ async def pagina_vendas(request: Request):
         return RedirectResponse(url="/login", status_code=303)
 
     with engine.connect() as conn:
-        produtos = conn.execute(
-            text("SELECT * FROM produtos WHERE quantidade > 0 ORDER BY nome")
-        ).fetchall()
+        produtos = conn.execute(text("""
+            SELECT id, nome, cor, tamanho, quantidade, preco
+            FROM produtos
+            WHERE quantidade > 0
+            ORDER BY nome, cor, tamanho
+        """)).fetchall()
 
         vendas = conn.execute(text("""
-            SELECT v.*, p.nome
+            SELECT v.*, p.nome, p.cor, p.tamanho
             FROM vendas v
             JOIN produtos p ON v.produto_id = p.id
             ORDER BY v.data_venda DESC

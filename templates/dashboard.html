@@ -119,8 +119,11 @@
                         <tbody>
                             {% for venda in vendas_recentes %}
                             <tr>
-                                <td>{{ venda.nome }}</td>
                                 <td>{{ venda.data_venda }}</td>
+                                <td>{{ venda.nome }}
+                                    {% if venda.cor %}<br><small>Cor: {{ venda.cor }}</small>{% endif %}
+                                    {% if venda.tamanho %}<br><small>Tamanho: {{ venda.tamanho }}</small>{% endif %}
+                                </td>
                                 <td>{{ venda.quantidade }}</td>
                                 <td class="text-success fw-bold">R$ {{ "%.2f"|format(venda.total) }}</td>
                             </tr>

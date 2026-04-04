@@ -16,9 +16,12 @@
                         <select name="produto_id" class="form-select" required>
                             <option value="" selected disabled>Escolha um produto...</option>
                             {% for p in produtos %}
-                                {% if p.quantidade > 0 %}
-                                <option value="{{ p.id }}">{{ p.nome }} (Disponível: {{ p.quantidade }})</option>
-                                {% endif %}
+                                <option value="{{ produto.id }}">
+                                    {{ produto.nome }}
+                                    {% if produto.cor %} - Cor: {{ produto.cor }}{% endif %}
+                                    {% if produto.tamanho %} - Tam: {{ produto.tamanho }}{% endif %}
+                                    - Estoque: {{ produto.quantidade }}
+        </option>
                             {% endfor %}
                         </select>
                         <div class="form-text">Apenas produtos com stock aparecem aqui.</div>
