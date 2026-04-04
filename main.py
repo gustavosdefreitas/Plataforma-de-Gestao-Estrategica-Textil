@@ -80,7 +80,9 @@ async def lifespan(app: FastAPI):
                 quantidade NUMERIC(10,2) DEFAULT 0,
                 preco NUMERIC(10,2),
                 empresa_id INTEGER,
-                fornecedor_id INTEGER
+                fornecedor_id INTEGER,
+                cor VARCHAR(50),
+                tamanho VARCHAR(50)
             );
         """))
 
@@ -241,18 +243,22 @@ async def novo_produto(
     quantidade: float = Form(...),
     preco: float = Form(...),
     empresa_id: int = Form(...),
-    fornecedor_id: int = Form(...)
+    fornecedor_id: int = Form(...),
+    cor: str = Form(None),
+    tamanho: str = Form(None),
 ):
     with engine.connect() as conn:
         conn.execute(text("""
-            INSERT INTO produtos (nome, quantidade, preco, empresa_id, fornecedor_id)
-            VALUES (:nome, :quantidade, :preco, :empresa_id, :fornecedor_id)
+            INSERT INTO produtos (nome, quantidade, preco, empresa_id, fornecedor_id, cor, tamanho)
+            VALUES (:nome, :quantidade, :preco, :empresa_id, :fornecedor_id, :cor, :tamanho)
         """), {
             "nome": nome,
             "quantidade": quantidade,
             "preco": preco,
             "empresa_id": empresa_id,
-            "fornecedor_id": fornecedor_id
+            "fornecedor_id": fornecedor_id,
+            "cor": cor,
+            "tamanho": tamanho,
         })
         conn.commit()
 
@@ -304,14 +310,16 @@ async def editar_produto_page(request: Request, id: int):
     })
 
 
-@app.post("/editar_produto/{id}")
-async def atualizar_produto(
+@app.post("/produtos/editar/{id}")
+async def editar_produto(
     id: int,
     nome: str = Form(...),
     quantidade: float = Form(...),
     preco: float = Form(...),
     empresa_id: int = Form(...),
-    fornecedor_id: int = Form(...)
+    fornecedor_id: int = Form(...),
+    cor: str = Form(None),
+    tamanho: str = Form(None),
 ):
     with engine.connect() as conn:
         conn.execute(text("""
@@ -320,15 +328,19 @@ async def atualizar_produto(
                 quantidade = :quantidade,
                 preco = :preco,
                 empresa_id = :empresa_id,
-                fornecedor_id = :fornecedor_id
+                fornecedor_id = :fornecedor_id,
+                cor = :cor,
+                tamanho = :tamanho
             WHERE id = :id
         """), {
+            "id": id,
             "nome": nome,
             "quantidade": quantidade,
             "preco": preco,
             "empresa_id": empresa_id,
             "fornecedor_id": fornecedor_id,
-            "id": id
+            "cor": cor,
+            "tamanho": tamanho,
         })
         conn.commit()
 

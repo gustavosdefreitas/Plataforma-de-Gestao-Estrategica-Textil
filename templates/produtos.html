@@ -8,12 +8,14 @@
     </div>
     <div class="card-body">
         <table class="table table-hover">
-            <thead><tr><th>Nome</th><th>Estoque</th><th>Empresa</th><th>Fornecedor</th><th>Preço</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Nome</th><th>Estoque</th><th>Cor</th><th>Tamanho</th><th>Empresa</th><th>Fornecedor</th><th>Preço</th><th>Ações</th></tr></thead>
             <tbody>
                 {% for p in produtos %}
                 <tr>
                     <td>{{ p.nome }}</td>
                     <td>{{ p.quantidade }}</td>
+                    <td>{{ p.cor }}</td>
+                    <td>{{ p.tamanho }}</td>
                     <td>{% if p.empresa_nome %}
                              {{ p.empresa_nome }}
                         {% else %}
@@ -50,6 +52,12 @@
             
             <label>Quantidade:</label>
             <input name="quantidade" type="number" step="0.01" placeholder="0.00" class="form-control mb-3" required>
+            
+            <label>Cor:</label>
+            <input type="text" name="cor" class="form-control" placeholder="Ex: Azul, Vermelho">
+             
+            <label>Tamanho:</label>
+            <input type="text" name="tamanho" class="form-control" placeholder="Ex: P, M, G ou 38, 40, 42">
             
             <label>Preço:</label>
             <input name="preco" type="number" step="0.01" placeholder="0.00" class="form-control mb-3" required>
