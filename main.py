@@ -76,11 +76,11 @@ async def lifespan(app: FastAPI):
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS produtos (
                 id SERIAL PRIMARY KEY,
-                nome VARCHAR(100) NOT NULL,
+                nome VARCHAR(100),
                 quantidade NUMERIC(10,2) DEFAULT 0,
-                preco NUMERIC(10,2) NOT NULL,
-                empresa_id INTEGER REFERENCES empresas(id) ON DELETE SET NULL,
-                fornecedor_id INTEGER REFERENCES fornecedores(id) ON DELETE SET NULL
+                preco NUMERIC(10,2),
+                empresa_id INTEGER,
+                fornecedor_id INTEGER
             );
         """))
 
@@ -494,6 +494,26 @@ async def editar_fornecedor(
 
     return RedirectResponse(url="/fornecedores", status_code=303)
 
+@app.post("/fornecedores/novo")
+async def novo_fornecedor(
+    nome: str = Form(...),
+    cnpj: str = Form(None),
+    telefone: str = Form(None),
+    email: str = Form(None),
+):
+    with engine.connect() as conn:
+        conn.execute(text("""
+            INSERT INTO fornecedores (nome, cnpj, telefone, email)
+            VALUES (:nome, :cnpj, :telefone, :email)
+        """), {
+            "nome": nome,
+            "cnpj": cnpj,
+            "telefone": telefone,
+            "email": email,
+        })
+        conn.commit()
+
+    return RedirectResponse(url="/fornecedores", status_code=303)
 
 # --- VENDAS ---
 @app.get("/vendas", response_class=HTMLResponse)
