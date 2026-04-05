@@ -22,17 +22,18 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="/produtos"><i class="fas fa-tags me-1"></i> Produtos</a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link" href="/vendas"><i class="fas fa-shopping-cart me-1"></i> Vendas</a>
+                    </li>
+                  
+                    {% if user and user.perfil == 'admin' %}
+                    <li class="nav-item border-start ms-lg-2 ps-lg-2">
+                        <a class="nav-link text-warning" href="/usuarios"><i class="fas fa-users-cog me-1"></i> Usuários</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/fornecedores"><i class="fas fa-truck me-1"></i> Fornecedores</a>
                     </li>
-                    {% if user and user.perfil == 'admin' %}
-                    <li class="nav-item border-start ms-lg-2 ps-lg-2">
-                        <a class="nav-link text-warning" href="/usuarios"><i class="fas fa-users-cog me-1"></i> Usuários</a>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/produtos"><i class="fas fa-tags me-1"></i> Produtos</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/banco-horas"><i class="fas fa-clock me-2"></i> Banco de Horas</a>
