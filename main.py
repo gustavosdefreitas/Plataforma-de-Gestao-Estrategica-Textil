@@ -821,6 +821,54 @@ async def listar_logs(
         "total_paginas": total_paginas
     })
 
+
+# --- BANCO DE HORAS ---
+@app.get("/banco-horas", response_class=HTMLResponse)
+async def banco_horas(request: Request):
+    user = get_current_user(request)
+    if not user or user.perfil != "admin":
+        return RedirectResponse(url="/", status_code=303)
+
+    with engine.connect() as conn:
+        resultados = conn.execute(text("""
+            WITH eventos AS (
+                SELECT
+                    username,
+                    acao,
+                    data_evento,
+                    LEAD(data_evento) OVER (
+                        PARTITION BY username, DATE(data_evento)
+                        ORDER BY data_evento
+                    ) AS proximo_evento,
+                    LEAD(acao) OVER (
+                        PARTITION BY username, DATE(data_evento)
+                        ORDER BY data_evento
+                    ) AS proxima_acao
+                FROM logs_sistema
+                WHERE acao IN ('LOGIN', 'LOGOUT')
+            )
+            SELECT
+                username,
+                DATE(data_evento) AS dia,
+                ROUND(SUM(
+                    CASE
+                        WHEN acao = 'LOGIN' AND proxima_acao = 'LOGOUT'
+                        THEN EXTRACT(EPOCH FROM (proximo_evento - data_evento)) / 3600
+                        ELSE 0
+                    END
+                )::numeric, 2) AS horas_trabalhadas
+            FROM eventos
+            GROUP BY username, DATE(data_evento)
+            ORDER BY dia DESC, username
+        """)).fetchall()
+
+    return templates.TemplateResponse("banco_horas.html", {
+        "request": request,
+        "user": user,
+        "resultados": resultados
+    })
+
+
 # --- API ---
 @app.get("/api/produtos/{empresa_id}")
 async def api_listar_produtos(empresa_id: int):
