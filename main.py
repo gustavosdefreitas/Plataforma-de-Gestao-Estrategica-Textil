@@ -8,6 +8,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from decimal import Decimal
+from math import ceil
+from fastapi import Query
 import os
 import hashlib
 import uuid
@@ -52,7 +54,7 @@ def registrar_log(usuario_id, username, acao, detalhes=None):
         })
         conn.commit()
 
-
+# --- STARTUP ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     with engine.connect() as conn:
@@ -129,6 +131,12 @@ async def lifespan(app: FastAPI):
             VALUES ('admin', :senha, 'admin')
             ON CONFLICT (username) DO NOTHING
         """), {"senha": hash_password("123456")})
+
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_data_evento ON logs_sistema (data_evento DESC)"))
+        
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_acao ON logs_sistema (acao)"))
+        
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_username ON logs_sistema (username)"))
 
         conn.commit()
     yield
@@ -735,24 +743,71 @@ async def atualizar_empresa(
 
 # --- LOGS SOMENTE ADMIN ---
 @app.get("/logs", response_class=HTMLResponse)
-async def listar_logs(request: Request):
+async def listar_logs(
+    request: Request,
+    acao: str = Query(None),
+    usuario: str = Query(None),
+    page: int = Query(1, ge=1)
+):
     user = get_current_user(request)
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
 
+    por_pagina = 20
+    offset = (page - 1) * por_pagina
+
+    filtros = []
+    params = {}
+
+    if acao:
+        filtros.append("acao = :acao")
+        params["acao"] = acao
+
+    if usuario:
+        filtros.append("username ILIKE :usuario")
+        params["usuario"] = f"%{usuario}%"
+
+    where_clause = ""
+    if filtros:
+        where_clause = "WHERE " + " AND ".join(filtros)
+
     with engine.connect() as conn:
-        logs = conn.execute(text("""
+        total_registros = conn.execute(text(f"""
+            SELECT COUNT(*)
+            FROM logs_sistema
+            {where_clause}
+        """), params).fetchone()[0]
+
+        params["limit"] = por_pagina
+        params["offset"] = offset
+
+        logs = conn.execute(text(f"""
             SELECT *
             FROM logs_sistema
+            {where_clause}
             ORDER BY data_evento DESC
-            LIMIT 200
+            LIMIT :limit OFFSET :offset
+        """), params).fetchall()
+
+        acoes_disponiveis = conn.execute(text("""
+            SELECT DISTINCT acao
+            FROM logs_sistema
+            WHERE acao IS NOT NULL
+            ORDER BY acao
         """)).fetchall()
 
-    return templates.TemplateResponse(request, "logs.html", {
-        "user": user,
-        "logs": logs
-    })
+    total_paginas = ceil(total_registros / por_pagina) if total_registros > 0 else 1
 
+    return templates.TemplateResponse("logs.html", {
+        "request": request,
+        "user": user,
+        "logs": logs,
+        "acoes_disponiveis": acoes_disponiveis,
+        "filtro_acao": acao,
+        "filtro_usuario": usuario,
+        "page": page,
+        "total_paginas": total_paginas
+    })
 
 # --- API ---
 @app.get("/api/produtos/{empresa_id}")
