@@ -180,7 +180,19 @@ async def login(request: Request, username: str = Form(...), password: str = For
     })
 
 @app.get("/logout")
-async def logout():
+async def logout(request: Request):
+    user = get_current_user(request)
+
+    if user:
+        registrar_log(user.id, user.username, "LOGOUT", "Usuário saiu do sistema")
+
+        with engine.connect() as conn:
+            conn.execute(
+                text("UPDATE usuarios SET session_id = NULL WHERE id = :id"),
+                {"id": user.id}
+            )
+            conn.commit()
+
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie("session_id")
     return response
