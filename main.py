@@ -1,12 +1,15 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import Response
+from weasyprint import HTML
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from datetime import date
 from decimal import Decimal
 from math import ceil
 from fastapi import Query
@@ -824,49 +827,170 @@ async def listar_logs(
 
 # --- BANCO DE HORAS ---
 @app.get("/banco-horas", response_class=HTMLResponse)
-async def banco_horas(request: Request):
+async def banco_horas(
+    request: Request,
+    usuario: str = Query(None),
+    data_inicio: date = Query(None),
+    data_fim: date = Query(None)
+):
     user = get_current_user(request)
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
 
-    with engine.connect() as conn:
-        resultados = conn.execute(text("""
-            WITH eventos AS (
-                SELECT
-                    username,
-                    acao,
-                    data_evento,
-                    LEAD(data_evento) OVER (
-                        PARTITION BY username, DATE(data_evento)
-                        ORDER BY data_evento
-                    ) AS proximo_evento,
-                    LEAD(acao) OVER (
-                        PARTITION BY username, DATE(data_evento)
-                        ORDER BY data_evento
-                    ) AS proxima_acao
-                FROM logs_sistema
-                WHERE acao IN ('LOGIN', 'LOGOUT')
-            )
+    filtros = ["acao IN ('LOGIN', 'LOGOUT')"]
+    params = {}
+
+    if usuario:
+        filtros.append("username = :usuario")
+        params["usuario"] = usuario
+
+    if data_inicio:
+        filtros.append("DATE(data_evento) >= :data_inicio")
+        params["data_inicio"] = data_inicio
+
+    if data_fim:
+        filtros.append("DATE(data_evento) <= :data_fim")
+        params["data_fim"] = data_fim
+
+    where_clause = "WHERE " + " AND ".join(filtros)
+
+    query = f"""
+        WITH eventos AS (
             SELECT
                 username,
+                acao,
+                data_evento,
                 DATE(data_evento) AS dia,
-                ROUND(SUM(
-                    CASE
-                        WHEN acao = 'LOGIN' AND proxima_acao = 'LOGOUT'
-                        THEN EXTRACT(EPOCH FROM (proximo_evento - data_evento)) / 3600
-                        ELSE 0
-                    END
-                )::numeric, 2) AS horas_trabalhadas
-            FROM eventos
-            GROUP BY username, DATE(data_evento)
-            ORDER BY dia DESC, username
+                LEAD(data_evento) OVER (
+                    PARTITION BY username, DATE(data_evento)
+                    ORDER BY data_evento
+                ) AS proximo_evento,
+                LEAD(acao) OVER (
+                    PARTITION BY username, DATE(data_evento)
+                    ORDER BY data_evento
+                ) AS proxima_acao
+            FROM logs_sistema
+            {where_clause}
+        )
+        SELECT
+            username,
+            dia,
+            ROUND(SUM(
+                CASE
+                    WHEN acao = 'LOGIN' AND proxima_acao = 'LOGOUT'
+                    THEN EXTRACT(EPOCH FROM (proximo_evento - data_evento)) / 3600
+                    ELSE 0
+                END
+            )::numeric, 2) AS horas_trabalhadas
+        FROM eventos
+        GROUP BY username, dia
+        ORDER BY dia DESC, username
+    """
+
+    with engine.connect() as conn:
+        resultados = conn.execute(text(query), params).fetchall()
+
+        usuarios = conn.execute(text("""
+            SELECT DISTINCT username
+            FROM logs_sistema
+            WHERE username IS NOT NULL
+            ORDER BY username
         """)).fetchall()
+
+    total_horas = sum(float(item.horas_trabalhadas or 0) for item in resultados)
 
     return templates.TemplateResponse("banco_horas.html", {
         "request": request,
         "user": user,
-        "resultados": resultados
+        "resultados": resultados,
+        "usuarios": usuarios,
+        "filtro_usuario": usuario,
+        "data_inicio": data_inicio,
+        "data_fim": data_fim,
+        "total_horas": round(total_horas, 2)
     })
+
+@app.get("/banco-horas/pdf")
+async def banco_horas_pdf(
+    request: Request,
+    usuario: str = Query(None),
+    data_inicio: date = Query(None),
+    data_fim: date = Query(None)
+):
+    user = get_current_user(request)
+    if not user or user.perfil != "admin":
+        return RedirectResponse(url="/", status_code=303)
+
+    filtros = ["acao IN ('LOGIN', 'LOGOUT')"]
+    params = {}
+
+    if usuario:
+        filtros.append("username = :usuario")
+        params["usuario"] = usuario
+
+    if data_inicio:
+        filtros.append("DATE(data_evento) >= :data_inicio")
+        params["data_inicio"] = data_inicio
+
+    if data_fim:
+        filtros.append("DATE(data_evento) <= :data_fim")
+        params["data_fim"] = data_fim
+
+    where_clause = "WHERE " + " AND ".join(filtros)
+
+    query = f"""
+        WITH eventos AS (
+            SELECT
+                username,
+                acao,
+                data_evento,
+                DATE(data_evento) AS dia,
+                LEAD(data_evento) OVER (
+                    PARTITION BY username, DATE(data_evento)
+                    ORDER BY data_evento
+                ) AS proximo_evento,
+                LEAD(acao) OVER (
+                    PARTITION BY username, DATE(data_evento)
+                    ORDER BY data_evento
+                ) AS proxima_acao
+            FROM logs_sistema
+            {where_clause}
+        )
+        SELECT
+            username,
+            dia,
+            ROUND(SUM(
+                CASE
+                    WHEN acao = 'LOGIN' AND proxima_acao = 'LOGOUT'
+                    THEN EXTRACT(EPOCH FROM (proximo_evento - data_evento)) / 3600
+                    ELSE 0
+                END
+            )::numeric, 2) AS horas_trabalhadas
+        FROM eventos
+        GROUP BY username, dia
+        ORDER BY dia DESC, username
+    """
+
+    with engine.connect() as conn:
+        resultados = conn.execute(text(query), params).fetchall()
+
+    total_horas = sum(float(item.horas_trabalhadas or 0) for item in resultados)
+
+    html = templates.get_template("banco_horas_pdf.html").render({
+        "resultados": resultados,
+        "total_horas": round(total_horas, 2),
+        "filtro_usuario": usuario,
+        "data_inicio": data_inicio,
+        "data_fim": data_fim
+    })
+
+    pdf = HTML(string=html).write_pdf()
+
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline; filename=relatorio_banco_horas.pdf"}
+    )
 
 
 # --- API ---
