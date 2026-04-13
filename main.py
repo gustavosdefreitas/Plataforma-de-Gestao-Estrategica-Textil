@@ -1011,7 +1011,7 @@ async def banco_horas_pdf(
     pdf.drawString(50, y, f"Período: {data_inicio or '---'} até {data_fim or '---'}")
 
     y -= 20
-    pdf.drawString(50, y, f"Total de horas: {formatar_horas_minutos(total_horas, 2)} h")
+    pdf.drawString(50, y, f"Total de horas: {formatar_horas_minutos(total_horas)} h")
 
     y -= 30
     pdf.setFont("Helvetica-Bold", 10)
