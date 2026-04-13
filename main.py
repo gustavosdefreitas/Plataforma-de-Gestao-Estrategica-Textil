@@ -629,7 +629,7 @@ async def registrar_venda(request: Request, produto_id: int = Form(...), qtd_ven
         if prod and float(prod.quantidade) >= qtd_venda:
             preco_unitario = float(prod.preco)
             total = qtd_venda * preco_unitario
-            data_venda = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+            data_venda = datetime.now()
 
             conn.execute(text("""
                 INSERT INTO vendas (produto_id, quantidade, preco_unitario, total, data_venda)
