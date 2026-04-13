@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.responses import Response
-from weasyprint import HTML
+from fastapi import FastAPI, Form, Request, Depends, Query
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
@@ -12,7 +13,6 @@ from datetime import datetime
 from datetime import date
 from decimal import Decimal
 from math import ceil
-from fastapi import Query
 import os
 import hashlib
 import uuid
@@ -976,18 +976,54 @@ async def banco_horas_pdf(
 
     total_horas = sum(float(item.horas_trabalhadas or 0) for item in resultados)
 
-    html = templates.get_template("banco_horas_pdf.html").render({
-        "resultados": resultados,
-        "total_horas": round(total_horas, 2),
-        "filtro_usuario": usuario,
-        "data_inicio": data_inicio,
-        "data_fim": data_fim
-    })
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    largura, altura = A4
 
-    pdf = HTML(string=html).write_pdf()
+    y = altura - 50
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(50, y, "Relatório de Banco de Horas")
+
+    y -= 30
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(50, y, f"Usuário: {usuario or 'Todos'}")
+
+    y -= 20
+    pdf.drawString(50, y, f"Período: {data_inicio or '---'} até {data_fim or '---'}")
+
+    y -= 20
+    pdf.drawString(50, y, f"Total de horas: {round(total_horas, 2)} h")
+
+    y -= 30
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(50, y, "Usuário")
+    pdf.drawString(220, y, "Data")
+    pdf.drawString(380, y, "Horas")
+
+    y -= 20
+    pdf.setFont("Helvetica", 10)
+
+    for item in resultados:
+        if y < 50:
+            pdf.showPage()
+            y = altura - 50
+            pdf.setFont("Helvetica-Bold", 10)
+            pdf.drawString(50, y, "Usuário")
+            pdf.drawString(220, y, "Data")
+            pdf.drawString(380, y, "Horas")
+            y -= 20
+            pdf.setFont("Helvetica", 10)
+
+        pdf.drawString(50, y, str(item.username))
+        pdf.drawString(220, y, str(item.dia))
+        pdf.drawString(380, y, f"{item.horas_trabalhadas} h")
+        y -= 18
+
+    pdf.save()
+    buffer.seek(0)
 
     return Response(
-        content=pdf,
+        content=buffer.getvalue(),
         media_type="application/pdf",
         headers={"Content-Disposition": "inline; filename=relatorio_banco_horas.pdf"}
     )
