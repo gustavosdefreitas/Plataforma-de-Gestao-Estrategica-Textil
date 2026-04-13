@@ -31,6 +31,12 @@ engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 def hash_password(password: str):
     return hashlib.sha256(password.encode()).hexdigest()
 
+def formatar_horas_minutos(valor):
+    total_minutos = round(float(valor) * 60)
+    horas = total_minutos // 60
+    minutos = total_minutos % 60
+    return f"{horas}h e {minutos} min"
+
 def get_current_user(request: Request):
     session_id = request.cookies.get("session_id")
     if not session_id:
@@ -899,16 +905,29 @@ async def banco_horas(
 
     total_horas = sum(float(item.horas_trabalhadas or 0) for item in resultados)
 
+    resultados_formatados = []
+    for item in resultados:
+        resultados_formatados.append({
+            "username": item.username,
+            "dia": item.dia,
+            "horas_trabalhadas": item.horas_trabalhadas,
+            "horas_formatadas": formatar_horas_minutos(item.horas_trabalhadas)
+        })
+
+    total_horas_formatado = formatar_horas_minutos(total_horas)
+
     return templates.TemplateResponse("banco_horas.html", {
         "request": request,
         "user": user,
-        "resultados": resultados,
+        "resultados": resultados_formatados,
         "usuarios": usuarios,
         "filtro_usuario": usuario,
         "data_inicio": data_inicio,
         "data_fim": data_fim,
-        "total_horas": round(total_horas, 2)
+        "total_horas": round(total_horas, 2),
+        "total_horas_formatado": total_horas_formatado
     })
+
 
 @app.get("/banco-horas/pdf")
 async def banco_horas_pdf(
@@ -992,7 +1011,7 @@ async def banco_horas_pdf(
     pdf.drawString(50, y, f"Período: {data_inicio or '---'} até {data_fim or '---'}")
 
     y -= 20
-    pdf.drawString(50, y, f"Total de horas: {round(total_horas, 2)} h")
+    pdf.drawString(50, y, f"Total de horas: {formatar_horas_minutos(total_horas, 2)} h")
 
     y -= 30
     pdf.setFont("Helvetica-Bold", 10)
@@ -1016,7 +1035,7 @@ async def banco_horas_pdf(
 
         pdf.drawString(50, y, str(item.username))
         pdf.drawString(220, y, str(item.dia))
-        pdf.drawString(380, y, f"{item.horas_trabalhadas} h")
+        pdf.drawString(380, y, formatar_horas_minutos(item.horas_trabalhadas))
         y -= 18
 
     pdf.save()

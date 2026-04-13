@@ -47,7 +47,7 @@
         <div class="card shadow-sm border-0">
             <div class="card-body">
                 <h6 class="text-muted mb-2">Total de Horas</h6>
-                <h3 class="fw-bold text-primary">{{ total_horas }} h</h3>
+                <h3 class="fw-bold text-primary">{{ total_horas_formatado }} h</h3>
             </div>
         </div>
     </div>
@@ -75,7 +75,7 @@
                     <tr>
                         <td class="ps-3">{{ item.username }}</td>
                         <td>{{ item.dia }}</td>
-                        <td class="fw-bold text-success">{{ item.horas_trabalhadas }} h</td>
+                        <td class="fw-bold text-success">{{ item.horas_trabalhadas }} </td>
                     </tr>
                     {% else %}
                     <tr>
