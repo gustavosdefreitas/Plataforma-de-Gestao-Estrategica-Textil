@@ -667,7 +667,6 @@ async def relatorio_vendas(
     request: Request,
     fornecedor_id: int | None = Query(None),
     empresa_id: int | None = Query(None),
-    usuario: str | None = Query(None),
     data_inicio: date | None = Query(None),
     data_fim: date | None = Query(None),
 ):
@@ -686,10 +685,6 @@ async def relatorio_vendas(
         filtros.append("p.empresa_id = :empresa_id")
         params["empresa_id"] = empresa_id
 
-    if usuario:
-        filtros.append("v.usuario = :usuario")
-        params["usuario"] = usuario
-
     if data_inicio:
         filtros.append("v.data_venda >= :data_inicio")
         params["data_inicio"] = data_inicio
@@ -707,7 +702,6 @@ async def relatorio_vendas(
             v.quantidade,
             v.preco_unitario,
             v.total,
-            v.usuario,
             p.nome AS produto_nome,
             f.nome AS fornecedor_nome,
             e.nome AS empresa_nome
@@ -744,10 +738,8 @@ async def relatorio_vendas(
         "vendas": vendas,
         "fornecedores": fornecedores,
         "empresas": empresas,
-        "usuarios": usuarios,
         "filtro_fornecedor": fornecedor_id,
         "filtro_empresa": empresa_id,
-        "filtro_usuario": usuario,
         "data_inicio": data_inicio,
         "data_fim": data_fim,
         "total_geral": total_geral,
@@ -798,7 +790,6 @@ async def relatorio_vendas_pdf(
             v.quantidade,
             v.preco_unitario,
             v.total,
-            v.usuario,
             p.nome AS produto_nome,
             f.nome AS fornecedor_nome,
             e.nome AS empresa_nome
