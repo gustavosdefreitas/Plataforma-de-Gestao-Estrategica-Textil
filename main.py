@@ -679,11 +679,11 @@ async def relatorio_vendas(
     params: dict[str, object] = {}
 
     if fornecedor_id:
-        filtros.append("v.fornecedor_id = :fornecedor_id")
+        filtros.append("p.fornecedor_id = :fornecedor_id")
         params["fornecedor_id"] = fornecedor_id
 
     if empresa_id:
-        filtros.append("v.empresa_id = :empresa_id")
+        filtros.append("p.empresa_id = :empresa_id")
         params["empresa_id"] = empresa_id
 
     if usuario:
@@ -713,8 +713,8 @@ async def relatorio_vendas(
             e.nome AS empresa_nome
         FROM vendas v
         JOIN produtos p   ON p.id = v.produto_id
-        LEFT JOIN fornecedores f ON f.id = v.fornecedor_id
-        LEFT JOIN empresas e     ON e.id = v.empresa_id
+        LEFT JOIN fornecedores f ON f.id = p.fornecedor_id
+        LEFT JOIN empresas e     ON e.id = p.empresa_id
         {where_clause}
         ORDER BY v.data_venda DESC, v.id DESC
     """
@@ -770,11 +770,11 @@ async def relatorio_vendas_pdf(
     params: dict[str, object] = {}
 
     if fornecedor_id:
-        filtros.append("v.fornecedor_id = :fornecedor_id")
+        filtros.append("p.fornecedor_id = :fornecedor_id")
         params["fornecedor_id"] = fornecedor_id
 
     if empresa_id:
-        filtros.append("v.empresa_id = :empresa_id")
+        filtros.append("p.empresa_id = :empresa_id")
         params["empresa_id"] = empresa_id
 
     if usuario:
@@ -804,8 +804,8 @@ async def relatorio_vendas_pdf(
             e.nome AS empresa_nome
         FROM vendas v
         JOIN produtos p   ON p.id = v.produto_id
-        LEFT JOIN fornecedores f ON f.id = v.fornecedor_id
-        LEFT JOIN empresas e     ON e.id = v.empresa_id
+        LEFT JOIN fornecedores f ON f.id = p.fornecedor_id
+        LEFT JOIN empresas e     ON e.id = p.empresa_id
         {where_clause}
         ORDER BY v.data_venda DESC, v.id DESC
     """
