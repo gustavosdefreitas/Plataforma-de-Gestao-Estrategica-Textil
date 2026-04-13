@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Relatório de Vendas{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0">Relatório de Vendas</h5>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/relatorio-vendas" class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Empresa</label>
+          <select name="empresa_id" class="form-select">
+            <option value="">Todas</option>
+            {% for e in empresas %}
+            <option value="{{ e.id }}" {% if filtro_empresa == e.id %}selected{% endif %}>
+              {{ e.nome_fantasia }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Fornecedor</label>
+          <select name="fornecedor_id" class="form-select">
+            <option value="">Todos</option>
+            {% for f in fornecedores %}
+            <option value="{{ f.id }}" {% if filtro_fornecedor == f.id %}selected{% endif %}>
+              {{ f.nome }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">Data início</label>
+          <input type="date" name="data_inicio" class="form-control" value="{{ data_inicio or '' }}">
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">Data fim</label>
+          <input type="date" name="data_fim" class="form-control" value="{{ data_fim or '' }}">
+        </div>
+
+        <div class="col-md-2 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100">
+            Filtrar
+          </button>
+        </div>
+
+        <div class="col-md-3 d-flex align-items-end">
+          <a
+            href="/relatorio-vendas/pdf?empresa_id={{ filtro_empresa or '' }}&fornecedor_id={{ filtro_fornecedor or '' }}&data_inicio={{ data_inicio or '' }}&data_fim={{ data_fim or '' }}"
+            class="btn btn-danger w-100">
+            Gerar PDF
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-3">Data</th>
+              <th>Empresa</th>
+              <th>Fornecedor</th>
+              <th>Produto</th>
+              <th>Qtd</th>
+              <th>Preço</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in vendas %}
+            <tr>
+              <td class="ps-3">{{ v.data_venda }}</td>
+              <td>{{ v.empresa_nome or '' }}</td>
+              <td>{{ v.fornecedor_nome or '' }}</td>
+              <td>{{ v.produto_nome }}</td>
+              <td>{{ v.quantidade }}</td>
+              <td>R$ {{ '%.2f'|format(v.preco_unitario) }}</td>
+              <td><strong>R$ {{ '%.2f'|format(v.total) }}</strong></td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="7" class="text-center py-4 text-muted">
+                Nenhuma venda encontrada.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer text-end">
+      <strong>Total geral: R$ {{ '%.2f'|format(total_geral) }}</strong>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

@@ -662,6 +662,225 @@ async def registrar_venda(request: Request, produto_id: int = Form(...), qtd_ven
 
     return RedirectResponse(url="/vendas", status_code=303)
 
+@app.get("/relatorio-vendas", response_class=HTMLResponse)
+async def relatorio_vendas(
+    request: Request,
+    fornecedor_id: int | None = Query(None),
+    empresa_id: int | None = Query(None),
+    usuario: str | None = Query(None),
+    data_inicio: date | None = Query(None),
+    data_fim: date | None = Query(None),
+):
+    user = get_current_user(request)
+    if not user or user.perfil != "admin":
+        return RedirectResponse(url="/", status_code=303)
+
+    filtros = ["1=1"]
+    params: dict[str, object] = {}
+
+    if fornecedor_id:
+        filtros.append("v.fornecedor_id = :fornecedor_id")
+        params["fornecedor_id"] = fornecedor_id
+
+    if empresa_id:
+        filtros.append("v.empresa_id = :empresa_id")
+        params["empresa_id"] = empresa_id
+
+    if usuario:
+        filtros.append("v.usuario = :usuario")
+        params["usuario"] = usuario
+
+    if data_inicio:
+        filtros.append("v.data_venda >= :data_inicio")
+        params["data_inicio"] = data_inicio
+
+    if data_fim:
+        filtros.append("v.data_venda <= :data_fim")
+        params["data_fim"] = data_fim
+
+    where_clause = "WHERE " + " AND ".join(filtros)
+
+    query = f"""
+        SELECT
+            v.id,
+            v.data_venda,
+            v.quantidade,
+            v.preco_unitario,
+            v.total,
+            v.usuario,
+            p.nome AS produto_nome,
+            f.nome AS fornecedor_nome,
+            e.nome AS empresa_nome
+        FROM vendas v
+        JOIN produtos p   ON p.id = v.produto_id
+        LEFT JOIN fornecedores f ON f.id = v.fornecedor_id
+        LEFT JOIN empresas e     ON e.id = v.empresa_id
+        {where_clause}
+        ORDER BY v.data_venda DESC, v.id DESC
+    """
+
+    with engine.connect() as conn:
+        vendas = conn.execute(text(query), params).fetchall()
+
+        fornecedores = conn.execute(text("""
+            SELECT id, nome FROM fornecedores ORDER BY nome
+        """)).fetchall()
+
+        empresas = conn.execute(text("""
+            SELECT id, nome FROM empresas ORDER BY nome
+        """)).fetchall()
+
+        usuarios = conn.execute(text("""
+            SELECT DISTINCT usuario FROM vendas
+            WHERE usuario IS NOT NULL
+            ORDER BY usuario
+        """)).fetchall()
+
+    total_geral = sum(float(v.total or 0) for v in vendas)
+
+    return templates.TemplateResponse("relatorio_vendas.html", {
+        "request": request,
+        "user": user,
+        "vendas": vendas,
+        "fornecedores": fornecedores,
+        "empresas": empresas,
+        "usuarios": usuarios,
+        "filtro_fornecedor": fornecedor_id,
+        "filtro_empresa": empresa_id,
+        "filtro_usuario": usuario,
+        "data_inicio": data_inicio,
+        "data_fim": data_fim,
+        "total_geral": total_geral,
+    })
+
+@app.get("/relatorio-vendas/pdf")
+async def relatorio_vendas_pdf(
+    request: Request,
+    fornecedor_id: int | None = Query(None),
+    empresa_id: int | None = Query(None),
+    usuario: str | None = Query(None),
+    data_inicio: date | None = Query(None),
+    data_fim: date | None = Query(None),
+):
+    user = get_current_user(request)
+    if not user or user.perfil != "admin":
+        return RedirectResponse(url="/", status_code=303)
+
+    filtros = ["1=1"]
+    params: dict[str, object] = {}
+
+    if fornecedor_id:
+        filtros.append("v.fornecedor_id = :fornecedor_id")
+        params["fornecedor_id"] = fornecedor_id
+
+    if empresa_id:
+        filtros.append("v.empresa_id = :empresa_id")
+        params["empresa_id"] = empresa_id
+
+    if usuario:
+        filtros.append("v.usuario = :usuario")
+        params["usuario"] = usuario
+
+    if data_inicio:
+        filtros.append("v.data_venda >= :data_inicio")
+        params["data_inicio"] = data_inicio
+
+    if data_fim:
+        filtros.append("v.data_venda <= :data_fim")
+        params["data_fim"] = data_fim
+
+    where_clause = "WHERE " + " AND ".join(filtros)
+
+    query = f"""
+        SELECT
+            v.id,
+            v.data_venda,
+            v.quantidade,
+            v.preco_unitario,
+            v.total,
+            v.usuario,
+            p.nome AS produto_nome,
+            f.nome AS fornecedor_nome,
+            e.nome AS empresa_nome
+        FROM vendas v
+        JOIN produtos p   ON p.id = v.produto_id
+        LEFT JOIN fornecedores f ON f.id = v.fornecedor_id
+        LEFT JOIN empresas e     ON e.id = v.empresa_id
+        {where_clause}
+        ORDER BY v.data_venda DESC, v.id DESC
+    """
+
+    with engine.connect() as conn:
+        vendas = conn.execute(text(query), params).fetchall()
+
+    total_geral = sum(float(v.total or 0) for v in vendas)
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    largura, altura = A4
+
+    y = altura - 50
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(50, y, "Relatório de Vendas")
+
+    y -= 25
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(50, y, f"Fornecedor: {fornecedor_id or 'Todos'}")
+    y -= 15
+    pdf.drawString(50, y, f"Empresa: {empresa_id or 'Todas'}")
+    y -= 15
+    pdf.drawString(50, y, f"Usuário: {usuario or 'Todos'}")
+    y -= 15
+    pdf.drawString(50, y, f"Período: {data_inicio or '---'} até {data_fim or '---'}")
+    y -= 15
+    pdf.drawString(50, y, f"Total geral: R$ {total_geral:.2f}")
+
+    y -= 30
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(30,  y, "Data")
+    pdf.drawString(90,  y, "Empresa")
+    pdf.drawString(170, y, "Fornecedor")
+    pdf.drawString(260, y, "Produto")
+    pdf.drawString(360, y, "Qtd")
+    pdf.drawString(390, y, "Preço")
+    pdf.drawString(440, y, "Total")
+
+    y -= 15
+    pdf.setFont("Helvetica", 8)
+
+    for v in vendas:
+        if y < 40:
+            pdf.showPage()
+            y = altura - 40
+            pdf.setFont("Helvetica-Bold", 9)
+            pdf.drawString(30,  y, "Data")
+            pdf.drawString(90,  y, "Empresa")
+            pdf.drawString(170, y, "Fornecedor")
+            pdf.drawString(260, y, "Produto")
+            pdf.drawString(360, y, "Qtd")
+            pdf.drawString(390, y, "Preço")
+            pdf.drawString(440, y, "Total")
+            y -= 15
+            pdf.setFont("Helvetica", 8)
+
+        pdf.drawString(30,  y, str(v.data_venda))
+        pdf.drawString(90,  y, str(v.empresa_nome or ""))
+        pdf.drawString(170, y, str(v.fornecedor_nome or ""))
+        pdf.drawString(260, y, str(v.produto_nome or ""))
+        pdf.drawString(360, y, str(v.quantidade))
+        pdf.drawString(390, y, f"{float(v.preco_unitario):.2f}")
+        pdf.drawString(440, y, f"{float(v.total):.2f}")
+        y -= 12
+
+    pdf.save()
+    buffer.seek(0)
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline; filename=relatorio_vendas.pdf"}
+    )
+
 
 # --- EMPRESAS ---
 @app.get("/empresas", response_class=HTMLResponse)
