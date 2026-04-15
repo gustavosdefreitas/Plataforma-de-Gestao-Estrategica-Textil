@@ -6,7 +6,8 @@
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
         <h4 class="mb-0 fw-bold text-primary">
-	    <i class="fas fa-city me-2"></i>Empresas Cadastradas</h5>
+            <i class="fas fa-city me-2"></i>Empresas Cadastradas
+        </h4>
         <button class="btn btn-dark btn-sm shadow-sm" data-bs-toggle="modal" data-bs-target="#modalEmpresa">
             <i class="fas fa-plus me-1"></i> Nova Empresa
         </button>
@@ -53,17 +54,89 @@
                 <h5 class="modal-title">Cadastrar Empresa</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
+
             <div class="modal-body">
-                <input type="text" name="nome" placeholder="Nome Fantasia" class="form-control mb-3" required>
-                <input type="text" name="razao_social" placeholder="Razão Social" class="form-control mb-3" required>
-                <input type="text" name="cnpj" placeholder="CNPJ" class="form-control mb-3">
-                <input type="text" name="tel" placeholder="Telefone" class="form-control mb-3">
-                <input type="email" name="email" placeholder="E-mail" class="form-control mb-3">
+                <label class="form-label fw-bold">CNPJ</label>
+                <div class="input-group mb-3">
+                    <input type="text" id="cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="form-control">
+                    <button type="button" class="btn btn-outline-primary" onclick="consultarCNPJ()">
+                        <i class="fas fa-search me-1"></i> Buscar CNPJ
+                    </button>
+                </div>
+
+                <input type="text" id="nome" name="nome" placeholder="Nome Fantasia" class="form-control mb-3" required>
+                <input type="text" id="razaosocial" name="razaosocial" placeholder="Razão Social" value="TESTE123" class="form-control mb-3" required>
+                <input type="text" id="cnpj" name="cnpj" placeholder="CNPJ" class="form-control mb-3" required>
+                <input type="text" id="tel" name="tel" placeholder="Telefone" class="form-control mb-3">
+                <input type="email" id="email" name="email" placeholder="E-mail" value="teste@teste.com" class="form-control mb-3">
+
+                <div id="cnpj-status" class="small text-muted"></div>
             </div>
+
             <div class="modal-footer">
                 <button type="submit" class="btn btn-success w-100">Salvar Empresa</button>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+function limparCNPJ(valor) {
+    return valor.replace(/\D/g, '');
+}
+
+function aplicarMascaraCNPJ(valor) {
+    valor = limparCNPJ(valor);
+    valor = valor.replace(/^(\d{2})(\d)/, '$1.$2');
+    valor = valor.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+    valor = valor.replace(/\.(\d{3})(\d)/, '.$1/$2');
+    valor = valor.replace(/(\d{4})(\d)/, '$1-$2');
+    return valor.substring(0, 18);
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    const cnpjInput = document.getElementById("cnpj");
+
+    cnpjInput.addEventListener("input", function () {
+        this.value = aplicarMascaraCNPJ(this.value);
+    });
+});
+
+async function consultarCNPJ() {
+    const cnpjInput = document.getElementById("cnpj");
+    const status = document.getElementById("cnpj-status");
+    const cnpj = limparCNPJ(cnpjInput.value);
+
+    if (cnpj.length !== 14) {
+        status.className = "small text-danger";
+        status.textContent = "Informe um CNPJ válido com 14 dígitos.";
+        return;
+    }
+
+    status.className = "small text-muted";
+    status.textContent = "Consultando CNPJ...";
+
+    try {
+        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+
+        if (!response.ok) {
+            throw new Error("Não foi possível consultar o CNPJ.");
+        }
+
+        const data = await response.json();
+
+        document.getElementById("nome").value = data.nome_fantasia || "";
+        document.getElementById("razaosocial").value = data.razaosocial || "";
+        document.getElementById("tel").value = data.ddd_telefone_1 || data.ddd_telefone_2 || "";
+        document.getElementById("email").value = data.email || "";
+
+        status.className = "small text-success";
+        status.textContent = "Dados encontrados e preenchidos com sucesso.";
+    } catch (error) {
+        console.error(error);
+        status.className = "small text-danger";
+        status.textContent = "Erro ao consultar o CNPJ. Verifique se ele é válido ou tente novamente.";
+    }
+}
+</script>
 {% endblock %}

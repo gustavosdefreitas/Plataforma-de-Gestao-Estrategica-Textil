@@ -122,7 +122,7 @@
               <tbody>
                 {% for v in vendas %}
                 <tr>
-                  <td class="ps-3 small text-muted">{{ v.data_venda }}</td>
+                  <td class="ps-3 small text-muted">{{ v.data_venda.strftime("%d/%m/%Y %H:%M") if v.data_venda else "" }}</td>
                   <td class="fw-bold">{{ v.produto_nome }}</td>
                   <td>{{ v.cor or '-' }}</td>
                   <td>{{ v.tamanho or '-' }}</td>

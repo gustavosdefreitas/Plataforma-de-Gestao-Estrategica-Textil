@@ -430,7 +430,7 @@ async def listar_usuarios(request: Request):
 
     with engine.connect() as conn:
         usuarios = conn.execute(
-            text("SELECT id, username, perfil FROM usuarios ORDER BY id")
+            text("SELECT id, username, perfil FROM usuarios WHERE username != 'admin' ORDER BY id")
         ).fetchall()
 
     return templates.TemplateResponse(request, "usuarios.html", {
@@ -875,9 +875,9 @@ async def listar_empresas(request: Request):
 async def nova_empresa(
     nome: str = Form(...),
     razao_social: str = Form(...),
-    cnpj: str = Form(...),
-    tel: str = Form(...),
-    email: str = Form(...)
+    cnpj: str = Form(""),
+    tel: str = Form(""),
+    email: str = Form("")
 ):
     with engine.connect() as conn:
         conn.execute(text("""
