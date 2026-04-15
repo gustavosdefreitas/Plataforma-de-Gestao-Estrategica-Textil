@@ -588,30 +588,98 @@ async def novo_fornecedor(
 
 # --- VENDAS ---
 @app.get("/vendas", response_class=HTMLResponse)
-async def pagina_vendas(request: Request):
+async def pagina_vendas(
+    request: Request,
+    fornecedor_id: str | None = Query(None),
+    empresa_id: str | None = Query(None),
+    data_inicio: str | None = Query(None),
+    data_fim: str | None = Query(None),
+):
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
+    # converte strings da query em int, se tiver valor
+    fornecedor_id_int = int(fornecedor_id) if fornecedor_id else None
+    empresa_id_int = int(empresa_id) if empresa_id else None
+    
+    filtros = ["1=1"]
+    params: dict[str, object] = {}
+
+    if fornecedor_id_int:
+        filtros.append("p.fornecedor_id = :fornecedor_id")
+        params["fornecedor_id"] = fornecedor_id_int
+
+    if empresa_id_int:
+        filtros.append("p.empresa_id = :empresa_id")
+        params["empresa_id"] = empresa_id_int
+
+    if data_inicio:
+        filtros.append("DATE(v.data_venda) >= :data_inicio")
+        params["data_inicio"] = data_inicio
+
+    if data_fim:
+        filtros.append("DATE(v.data_venda) <= :data_fim")
+        params["data_fim"] = data_fim
+
+    where_clause = "WHERE " + " AND ".join(filtros)
+
+    query = f"""
+        SELECT
+            v.id,
+            v.data_venda,
+            v.quantidade,
+            v.preco_unitario,
+            v.total,
+            p.nome AS produto_nome,
+            p.cor,
+            p.tamanho,
+            f.nome AS fornecedor_nome,
+            e.nome_fantasia AS empresa_nome
+        FROM vendas v
+        JOIN produtos p ON p.id = v.produto_id
+        LEFT JOIN fornecedores f ON f.id = p.fornecedor_id
+        LEFT JOIN empresas e ON e.id = p.empresa_id
+        {where_clause}
+        ORDER BY v.data_venda DESC, v.id DESC
+    """
+
     with engine.connect() as conn:
         produtos = conn.execute(text("""
-            SELECT id, nome, cor, tamanho, quantidade, preco
+            SELECT *
             FROM produtos
             WHERE quantidade > 0
-            ORDER BY nome, cor, tamanho
+            ORDER BY nome
         """)).fetchall()
 
-        vendas = conn.execute(text("""
-            SELECT v.*, p.nome, p.cor, p.tamanho
-            FROM vendas v
-            JOIN produtos p ON v.produto_id = p.id
-            ORDER BY v.data_venda DESC
+        vendas = conn.execute(text(query), params).fetchall()
+
+        fornecedores = conn.execute(text("""
+            SELECT id, nome
+            FROM fornecedores
+            ORDER BY nome
         """)).fetchall()
 
-    return templates.TemplateResponse(request, "vendas.html", {
+        empresas = conn.execute(text("""
+            SELECT id, nome_fantasia
+            FROM empresas
+            ORDER BY nome_fantasia
+        """)).fetchall()
+
+    total_geral = sum(float(v.total or 0) for v in vendas)
+
+    return templates.TemplateResponse("vendas.html", {
+        "request": request,
         "user": user,
         "produtos": produtos,
-        "vendas": vendas
+        "vendas": vendas,
+        "fornecedores": fornecedores,
+        "empresas": empresas,
+        "filtro_fornecedor": fornecedor_id_int,
+        "filtro_empresa": empresa_id_int,
+        "data_inicio": data_inicio,
+        "data_fim": data_fim,
+        "total_geral": total_geral,
     })
 
 @app.post("/vendas/nova")
@@ -662,123 +730,38 @@ async def registrar_venda(request: Request, produto_id: int = Form(...), qtd_ven
 
     return RedirectResponse(url="/vendas", status_code=303)
 
-@app.get("/relatorio-vendas", response_class=HTMLResponse)
-async def relatorio_vendas(
-    request: Request,
-    fornecedor_id: int | None = Query(None),
-    empresa_id: int | None = Query(None),
-    data_inicio: date | None = Query(None),
-    data_fim: date | None = Query(None),
-):
-    user = get_current_user(request)
-    if not user or user.perfil != "admin":
-        return RedirectResponse(url="/", status_code=303)
-
-    filtros = ["1=1"]
-    params: dict[str, object] = {}
-
-    if fornecedor_id:
-        filtros.append("p.fornecedor_id = :fornecedor_id")
-        params["fornecedor_id"] = fornecedor_id
-
-    if empresa_id:
-        filtros.append("p.empresa_id = :empresa_id")
-        params["empresa_id"] = empresa_id
-
-    if data_inicio:
-        filtros.append("v.data_venda >= :data_inicio")
-        params["data_inicio"] = data_inicio
-
-    if data_fim:
-        filtros.append("v.data_venda <= :data_fim")
-        params["data_fim"] = data_fim
-
-    where_clause = "WHERE " + " AND ".join(filtros)
-
-    query = f"""
-        SELECT
-            v.id,
-            v.data_venda,
-            v.quantidade,
-            v.preco_unitario,
-            v.total,
-            p.nome AS produto_nome,
-            f.nome AS fornecedor_nome,
-            e.nome AS empresa_nome
-        FROM vendas v
-        JOIN produtos p   ON p.id = v.produto_id
-        LEFT JOIN fornecedores f ON f.id = p.fornecedor_id
-        LEFT JOIN empresas e     ON e.id = p.empresa_id
-        {where_clause}
-        ORDER BY v.data_venda DESC, v.id DESC
-    """
-
-    with engine.connect() as conn:
-        vendas = conn.execute(text(query), params).fetchall()
-
-        fornecedores = conn.execute(text("""
-            SELECT id, nome FROM fornecedores ORDER BY nome
-        """)).fetchall()
-
-        empresas = conn.execute(text("""
-            SELECT id, nome FROM empresas ORDER BY nome
-        """)).fetchall()
-
-        usuarios = conn.execute(text("""
-            SELECT DISTINCT usuario FROM vendas
-            WHERE usuario IS NOT NULL
-            ORDER BY usuario
-        """)).fetchall()
-
-    total_geral = sum(float(v.total or 0) for v in vendas)
-
-    return templates.TemplateResponse("relatorio_vendas.html", {
-        "request": request,
-        "user": user,
-        "vendas": vendas,
-        "fornecedores": fornecedores,
-        "empresas": empresas,
-        "filtro_fornecedor": fornecedor_id,
-        "filtro_empresa": empresa_id,
-        "data_inicio": data_inicio,
-        "data_fim": data_fim,
-        "total_geral": total_geral,
-    })
-
-@app.get("/relatorio-vendas/pdf")
+@app.get("/vendas/pdf")
 async def relatorio_vendas_pdf(
     request: Request,
-    fornecedor_id: int | None = Query(None),
-    empresa_id: int | None = Query(None),
-    usuario: str | None = Query(None),
-    data_inicio: date | None = Query(None),
-    data_fim: date | None = Query(None),
+    fornecedor_id: str | None = Query(None),
+    empresa_id: str | None = Query(None),
+    data_inicio: str | None = Query(None),
+    data_fim: str | None = Query(None),
 ):
     user = get_current_user(request)
-    if not user or user.perfil != "admin":
-        return RedirectResponse(url="/", status_code=303)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
 
+    fornecedor_id_int = int(fornecedor_id) if fornecedor_id else None
+    empresa_id_int = int(empresa_id) if empresa_id else None
+    
     filtros = ["1=1"]
     params: dict[str, object] = {}
 
-    if fornecedor_id:
+    if fornecedor_id_int:
         filtros.append("p.fornecedor_id = :fornecedor_id")
-        params["fornecedor_id"] = fornecedor_id
+        params["fornecedor_id"] = fornecedor_id_int
 
-    if empresa_id:
+    if empresa_id_int:
         filtros.append("p.empresa_id = :empresa_id")
-        params["empresa_id"] = empresa_id
-
-    if usuario:
-        filtros.append("v.usuario = :usuario")
-        params["usuario"] = usuario
+        params["empresa_id"] = empresa_id_int
 
     if data_inicio:
-        filtros.append("v.data_venda >= :data_inicio")
+        filtros.append("DATE(v.data_venda) >= :data_inicio")
         params["data_inicio"] = data_inicio
 
     if data_fim:
-        filtros.append("v.data_venda <= :data_fim")
+        filtros.append("DATE(v.data_venda) <= :data_fim")
         params["data_fim"] = data_fim
 
     where_clause = "WHERE " + " AND ".join(filtros)
@@ -792,11 +775,11 @@ async def relatorio_vendas_pdf(
             v.total,
             p.nome AS produto_nome,
             f.nome AS fornecedor_nome,
-            e.nome AS empresa_nome
+            e.nome_fantasia AS empresa_nome
         FROM vendas v
-        JOIN produtos p   ON p.id = v.produto_id
+        JOIN produtos p ON p.id = v.produto_id
         LEFT JOIN fornecedores f ON f.id = p.fornecedor_id
-        LEFT JOIN empresas e     ON e.id = p.empresa_id
+        LEFT JOIN empresas e ON e.id = p.empresa_id
         {where_clause}
         ORDER BY v.data_venda DESC, v.id DESC
     """
@@ -820,21 +803,19 @@ async def relatorio_vendas_pdf(
     y -= 15
     pdf.drawString(50, y, f"Empresa: {empresa_id or 'Todas'}")
     y -= 15
-    pdf.drawString(50, y, f"Usuário: {usuario or 'Todos'}")
-    y -= 15
     pdf.drawString(50, y, f"Período: {data_inicio or '---'} até {data_fim or '---'}")
     y -= 15
     pdf.drawString(50, y, f"Total geral: R$ {total_geral:.2f}")
 
     y -= 30
     pdf.setFont("Helvetica-Bold", 9)
-    pdf.drawString(30,  y, "Data")
-    pdf.drawString(90,  y, "Empresa")
-    pdf.drawString(170, y, "Fornecedor")
-    pdf.drawString(260, y, "Produto")
-    pdf.drawString(360, y, "Qtd")
-    pdf.drawString(390, y, "Preço")
-    pdf.drawString(440, y, "Total")
+    pdf.drawString(30, y, "Data")
+    pdf.drawString(100, y, "Empresa")
+    pdf.drawString(190, y, "Fornecedor")
+    pdf.drawString(290, y, "Produto")
+    pdf.drawString(380, y, "Qtd")
+    pdf.drawString(420, y, "Preço")
+    pdf.drawString(470, y, "Total")
 
     y -= 15
     pdf.setFont("Helvetica", 8)
@@ -844,23 +825,23 @@ async def relatorio_vendas_pdf(
             pdf.showPage()
             y = altura - 40
             pdf.setFont("Helvetica-Bold", 9)
-            pdf.drawString(30,  y, "Data")
-            pdf.drawString(90,  y, "Empresa")
-            pdf.drawString(170, y, "Fornecedor")
-            pdf.drawString(260, y, "Produto")
-            pdf.drawString(360, y, "Qtd")
-            pdf.drawString(390, y, "Preço")
-            pdf.drawString(440, y, "Total")
+            pdf.drawString(30, y, "Data")
+            pdf.drawString(100, y, "Empresa")
+            pdf.drawString(190, y, "Fornecedor")
+            pdf.drawString(290, y, "Produto")
+            pdf.drawString(380, y, "Qtd")
+            pdf.drawString(420, y, "Preço")
+            pdf.drawString(470, y, "Total")
             y -= 15
             pdf.setFont("Helvetica", 8)
 
-        pdf.drawString(30,  y, str(v.data_venda))
-        pdf.drawString(90,  y, str(v.empresa_nome or ""))
-        pdf.drawString(170, y, str(v.fornecedor_nome or ""))
-        pdf.drawString(260, y, str(v.produto_nome or ""))
-        pdf.drawString(360, y, str(v.quantidade))
-        pdf.drawString(390, y, f"{float(v.preco_unitario):.2f}")
-        pdf.drawString(440, y, f"{float(v.total):.2f}")
+        pdf.drawString(30, y, str(v.data_venda)[:16])
+        pdf.drawString(100, y, str(v.empresa_nome or ""))
+        pdf.drawString(190, y, str(v.fornecedor_nome or ""))
+        pdf.drawString(290, y, str(v.produto_nome or ""))
+        pdf.drawString(380, y, str(v.quantidade))
+        pdf.drawString(420, y, f"{float(v.preco_unitario):.2f}")
+        pdf.drawString(470, y, f"{float(v.total):.2f}")
         y -= 12
 
     pdf.save()
