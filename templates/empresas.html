@@ -12,6 +12,7 @@
             <i class="fas fa-plus me-1"></i> Nova Empresa
         </button>
     </div>
+
     <div class="card-body">
         <div class="table-responsive">
             <table class="table table-hover align-middle">
@@ -28,7 +29,10 @@
                     <tr>
                         <td class="fw-bold">{{ e.nome_fantasia }}</td>
                         <td>{{ e.cnpj }}</td>
-                        <td>{{ e.email }}<br><small class="text-muted">{{ e.telefone }}</small></td>
+                        <td>
+                            {{ e.email }}<br>
+                            <small class="text-muted">{{ e.telefone }}</small>
+                        </td>
                         <td class="text-center">
                             <a href="/empresas/editar/{{ e.id }}" class="btn btn-outline-primary btn-sm me-1">
                                 <i class="fas fa-edit"></i>
@@ -39,7 +43,9 @@
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="4" class="text-center py-4">Nenhuma empresa cadastrada.</td></tr>
+                    <tr>
+                        <td colspan="4" class="text-center py-4">Nenhuma empresa cadastrada.</td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -58,17 +64,16 @@
             <div class="modal-body">
                 <label class="form-label fw-bold">CNPJ</label>
                 <div class="input-group mb-3">
-                    <input type="text" id="cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="form-control">
+                    <input type="text" id="cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="form-control" required>
                     <button type="button" class="btn btn-outline-primary" onclick="consultarCNPJ()">
                         <i class="fas fa-search me-1"></i> Buscar CNPJ
                     </button>
                 </div>
 
                 <input type="text" id="nome" name="nome" placeholder="Nome Fantasia" class="form-control mb-3" required>
-                <input type="text" id="razaosocial" name="razaosocial" placeholder="Razão Social" value="TESTE123" class="form-control mb-3" required>
-                <input type="text" id="cnpj" name="cnpj" placeholder="CNPJ" class="form-control mb-3" required>
+                <input type="text" id="razao_social" name="razao_social" placeholder="Razão Social" class="form-control mb-3" required>
                 <input type="text" id="tel" name="tel" placeholder="Telefone" class="form-control mb-3">
-                <input type="email" id="email" name="email" placeholder="E-mail" value="teste@teste.com" class="form-control mb-3">
+                <input type="email" id="email" name="email" placeholder="E-mail" class="form-control mb-3">
 
                 <div id="cnpj-status" class="small text-muted"></div>
             </div>
@@ -97,9 +102,11 @@ function aplicarMascaraCNPJ(valor) {
 document.addEventListener("DOMContentLoaded", function () {
     const cnpjInput = document.getElementById("cnpj");
 
-    cnpjInput.addEventListener("input", function () {
-        this.value = aplicarMascaraCNPJ(this.value);
-    });
+    if (cnpjInput) {
+        cnpjInput.addEventListener("input", function () {
+            this.value = aplicarMascaraCNPJ(this.value);
+        });
+    }
 });
 
 async function consultarCNPJ() {
@@ -126,7 +133,7 @@ async function consultarCNPJ() {
         const data = await response.json();
 
         document.getElementById("nome").value = data.nome_fantasia || "";
-        document.getElementById("razaosocial").value = data.razaosocial || "";
+        document.getElementById("razao_social").value = data.razao_social || "";
         document.getElementById("tel").value = data.ddd_telefone_1 || data.ddd_telefone_2 || "";
         document.getElementById("email").value = data.email || "";
 
