@@ -1,155 +1,197 @@
 {% extends "base.html" %}
-
 {% block title %}Vendas - Estoque MEI{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-
-  <div class="row justify-content-center mb-4">
-    <div class="col-lg-6">
-      <div class="card shadow-sm border-0">
-        <div class="card-header bg-success text-white py-3">
-          <h5 class="mb-0 fw-bold">
-            <i class="fas fa-cart-plus me-2"></i>Registrar Venda
-          </h5>
-        </div>
-        <div class="card-body">
-          <form action="/vendas/nova" method="POST">
-            <div class="mb-3">
-              <label class="form-label fw-bold">Selecionar Produto</label>
-              <select name="produto_id" class="form-select" required>
-                <option value="">Escolha um produto...</option>
-                {% for produto in produtos %}
-                <option value="{{ produto.id }}">
-                  {{ produto.nome }}
-                  {% if produto.cor %} - Cor: {{ produto.cor }}{% endif %}
-                  {% if produto.tamanho %} - Tam: {{ produto.tamanho }}{% endif %}
-                  - Estoque: {{ produto.quantidade }}
-                </option>
-                {% endfor %}
-              </select>
-              <div class="form-text">Apenas produtos com stock aparecem aqui.</div>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label fw-bold">Quantidade a Vender</label>
-              <input type="number" name="qtd_venda" class="form-control" step="0.01" value="0.01" required>
-            </div>
-
-            <button type="submit" class="btn btn-success w-100 fw-bold shadow-sm">
-              <i class="fas fa-check-circle me-1"></i> Finalizar Venda
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="row">
+<div class="row">
     <div class="col-12">
-      <div class="card shadow-sm border-0">
-        <div class="card-header bg-white py-3">
-          <h5 class="mb-0 fw-bold text-dark">
-            <i class="fas fa-history me-2"></i>Histórico de Vendas
-          </h5>
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-success text-white py-3">
+                <h5 class="mb-0 fw-bold">
+                    <i class="fas fa-cart-plus me-2"></i>Registrar Venda
+                </h5>
+            </div>
+
+            <div class="card-body">
+                <form action="/vendas/nova" method="POST" id="form-venda">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Tipo de Documento</label>
+                            <select name="tipo_documento" class="form-select" required>
+                                <option value="comprovante">Comprovante</option>
+                                <option value="nfe">NFe</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Empresa que realizou a venda</label>
+                            <select name="empresa_id" class="form-select" required>
+                                <option value="">Escolha a empresa...</option>
+                                {% for empresa in empresas %}
+                                    <option value="{{ empresa.id }}">{{ empresa.nome_fantasia }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Nome do Cliente</label>
+                            <input type="text" name="cliente_nome" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">CPF ou CNPJ do Cliente</label>
+                            <input type="text" name="cliente_cpf_cnpj" class="form-control">
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">E-mail do Cliente</label>
+                            <input type="email" name="cliente_email" class="form-control">
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Telefone do Cliente</label>
+                            <input type="text" name="cliente_telefone" class="form-control">
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold mb-0">
+                            <i class="fas fa-box me-2"></i>Itens da venda
+                        </h6>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="adicionarItem()">
+                            <i class="fas fa-plus me-1"></i>Adicionar produto
+                        </button>
+                    </div>
+
+                    <div id="itens-venda">
+                        <div class="row item-venda mb-3">
+                            <div class="col-md-8">
+                                <label class="form-label fw-bold">Produto</label>
+                                <select name="produto_id" class="form-select" required>
+                                    <option value="">Escolha um produto...</option>
+                                    {% for produto in produtos %}
+                                        <option value="{{ produto.id }}">
+                                            {{ produto.nome }}
+                                            {% if produto.cor %} - Cor: {{ produto.cor }}{% endif %}
+                                            {% if produto.tamanho %} - Tam: {{ produto.tamanho }}{% endif %}
+                                            - Estoque: {{ produto.quantidade }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold">Quantidade</label>
+                                <input type="number" name="qtd_venda" class="form-control" step="0.01" min="0.01" value="1" required>
+                            </div>
+
+                            <div class="col-md-1 d-flex align-items-end">
+                                <button type="button" class="btn btn-outline-danger w-100" onclick="removerItem(this)" title="Remover item">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-success fw-bold px-4">
+                            <i class="fas fa-check-circle me-1"></i>Finalizar Venda
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
-
-        <div class="card-body border-bottom">
-          <form method="GET" action="/vendas" class="row g-3 align-items-end">
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Fornecedor</label>
-              <select name="fornecedor_id" class="form-select">
-                <option value="">Todos</option>
-                {% for fornecedor in fornecedores %}
-                <option value="{{ fornecedor.id }}" {% if filtro_fornecedor == fornecedor.id %}selected{% endif %}>
-                  {{ fornecedor.nome }}
-                </option>
-                {% endfor %}
-              </select>
-            </div>
-
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Empresa</label>
-              <select name="empresa_id" class="form-select">
-                <option value="">Todas</option>
-                {% for empresa in empresas %}
-                <option value="{{ empresa.id }}" {% if filtro_empresa == empresa.id %}selected{% endif %}>
-                  {{ empresa.nome_fantasia }}
-                </option>
-                {% endfor %}
-              </select>
-            </div>
-
-            <div class="col-md-2">
-              <label class="form-label fw-bold">Data inicial</label>
-              <input type="date" name="data_inicio" class="form-control" value="{{ data_inicio or '' }}">
-            </div>
-
-            <div class="col-md-2">
-              <label class="form-label fw-bold">Data final</label>
-              <input type="date" name="data_fim" class="form-control" value="{{ data_fim or '' }}">
-            </div>
-
-            <div class="col-md-1 d-grid">
-              <button type="submit" class="btn btn-primary fw-bold">
-                <i class="fas fa-filter"></i>
-              </button>
-            </div>
-
-            <div class="col-md-1 d-grid">
-              <a href="/vendas/pdf?fornecedor_id={{ filtro_fornecedor or '' }}&empresa_id={{ filtro_empresa or '' }}&data_inicio={{ data_inicio or '' }}&data_fim={{ data_fim or '' }}"
-                 class="btn btn-danger fw-bold">
-                <i class="fas fa-file-pdf"></i>
-              </a>
-            </div>
-          </form>
-        </div>
-
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th class="ps-3">Data/Hora</th>
-                  <th>Produto</th>
-                  <th>Cor</th>
-                  <th>Tamanho</th>
-                  <th>Qtd</th>
-                  <th>Preço Unit.</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for v in vendas %}
-                <tr>
-                  <td class="ps-3 small text-muted">{{ v.data_venda.strftime("%d/%m/%Y %H:%M") if v.data_venda else "" }}</td>
-                  <td class="fw-bold">{{ v.produto_nome }}</td>
-                  <td>{{ v.cor or '-' }}</td>
-                  <td>{{ v.tamanho or '-' }}</td>
-                  <td>{{ v.quantidade }}</td>
-                  <td>R$ {{ '%.2f'|format(v.preco_unitario) }}</td>
-                  <td class="text-success fw-bold">R$ {{ '%.2f'|format(v.total) }}</td>
-                </tr>
-                {% else %}
-                <tr>
-                  <td colspan="7" class="text-center py-5 text-muted">
-                    <i class="fas fa-info-circle me-1"></i> Nenhuma venda realizada ainda.
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-              <tfoot class="table-light">
-                <tr>
-                  <th colspan="6" class="text-end">Total geral:</th>
-                  <th class="text-success">R$ {{ '%.2f'|format(total_geral) }}</th>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-
-      </div>
     </div>
-  </div>
 </div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold text-dark">
+                    <i class="fas fa-history me-2"></i>Histórico de Vendas
+                </h5>
+            </div>
+
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">Data/Hora</th>
+                                <th>Cliente</th>
+                                <th>Produto</th>
+                                <th>Qtd</th>
+                                <th>Preço Unit.</th>
+                                <th>Total</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for v in vendas %}
+                            <tr>
+                                <td class="ps-3 small text-muted">{{ v.data_venda.strftime('%d/%m/%Y %H:%M') if v.data_venda else '' }}</td>
+                                <td>{{ v.cliente_nome }}</td>
+                                <td class="fw-bold">{{ v.produto_nome }}</td>
+                                <td>{{ v.quantidade }}</td>
+                                <td>R$ {{ "%.2f"|format(v.preco_unitario) }}</td>
+                                <td class="text-success fw-bold">R$ {{ "%.2f"|format(v.total) }}</td>
+                                <td>
+                                    {% if v.tipo_documento == 'comprovante' %}
+                                        {% if v.grupo_venda %}
+                                            <a href="/vendas/comprovante/grupo/{{ v.grupo_venda }}" target="_blank" class="btn btn-sm btn-outline-danger" title="Abrir comprovante">
+                                                <i class="fas fa-file-pdf"></i>
+                                            </a>
+                                        {% else %}
+                                            <a href="/vendas/comprovante/{{ v.id }}" target="_blank" class="btn btn-sm btn-outline-danger" title="Abrir comprovante">
+                                                <i class="fas fa-file-pdf"></i>
+                                            </a>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center py-5 text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>Nenhuma venda realizada ainda.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function adicionarItem() {
+    const container = document.getElementById("itens-venda");
+    const primeiroItem = container.querySelector(".item-venda");
+    const novoItem = primeiroItem.cloneNode(true);
+
+    novoItem.querySelectorAll("select, input").forEach(campo => {
+        if (campo.tagName === "SELECT") {
+            campo.selectedIndex = 0;
+        } else {
+            campo.value = campo.name === "qtd_venda" ? "1" : "";
+        }
+    });
+
+    container.appendChild(novoItem);
+}
+
+function removerItem(botao) {
+    const container = document.getElementById("itens-venda");
+    const itens = container.querySelectorAll(".item-venda");
+
+    if (itens.length > 1) {
+        botao.closest(".item-venda").remove();
+    }
+}
+</script>
 {% endblock %}

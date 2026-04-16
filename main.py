@@ -128,6 +128,13 @@ async def lifespan(app: FastAPI):
             CREATE TABLE IF NOT EXISTS vendas (
                 id SERIAL PRIMARY KEY,
                 produto_id INTEGER REFERENCES produtos(id) ON DELETE CASCADE,
+                empresa_id INTEGER REFERENCES empresas(id),
+                tipo_documento VARCHAR(20) NOT NULL DEFAULT 'comprovante',
+                cliente_nome VARCHAR(100) NOT NULL,
+                cliente_cpf_cnpj VARCHAR(20),
+                cliente_email VARCHAR(100),
+                cliente_telefone VARCHAR(20),
+                status_documento VARCHAR(30) DEFAULT 'gerado',
                 quantidade NUMERIC(10,2) NOT NULL,
                 preco_unitario NUMERIC(10,2) NOT NULL,
                 total NUMERIC(10,2) NOT NULL,
@@ -135,6 +142,11 @@ async def lifespan(app: FastAPI):
             );
         """))
 
+        conn.execute(text("""
+            ALTER TABLE vendas
+            ADD COLUMN IF NOT EXISTS grupo_venda VARCHAR(36)
+        """))
+        
         conn.execute(text("""
             INSERT INTO usuarios (username, password, perfil)
             VALUES ('admin', :senha, 'admin')
@@ -220,7 +232,22 @@ async def dashboard(request: Request):
         ).fetchone()[0]
 
         total_vendas = conn.execute(
-            text("SELECT COUNT(*) FROM vendas")
+            text("""
+                SELECT COUNT(*)
+                FROM vendas
+                WHERE data_venda >= date_trunc('month', CURRENT_DATE)
+                AND data_venda < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+            """)
+        ).fetchone()[0]
+
+        # Valor total vendido no mês atual
+        total_vendas_valor = conn.execute(
+            text("""
+                SELECT COALESCE(SUM(total), 0)
+                FROM vendas
+                WHERE data_venda >= date_trunc('month', CURRENT_DATE)
+                    AND data_venda < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+            """)
         ).fetchone()[0]
 
         total_empresas = conn.execute(
@@ -257,6 +284,7 @@ async def dashboard(request: Request):
         "user": user,
         "total_produtos": float(total_produtos or 0),
         "total_vendas": total_vendas,
+        "total_vendas_valor": float(total_vendas_valor or 0),
         "total_empresas": total_empresas,
         "total_fornecedores": total_fornecedores,
         "labels": labels,
@@ -305,8 +333,8 @@ async def novo_produto(
     empresa_id: int = Form(...),
     fornecedor_id: int = Form(...),
     cor: str = Form(None),
-    tamanho: str = Form(None),
-):
+    tamanho: str = Form(None),):
+
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
@@ -382,8 +410,8 @@ async def editar_produto(
     empresa_id: int = Form(...),
     fornecedor_id: int = Form(...),
     cor: str = Form(None),
-    tamanho: str = Form(None),
-):
+    tamanho: str = Form(None),):
+    
     with engine.connect() as conn:
         conn.execute(text("""
             UPDATE produtos
@@ -443,8 +471,8 @@ async def novo_usuario(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    perfil: str = Form(...)
-):
+    perfil: str = Form(...)):
+    
     user = get_current_user(request)
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
@@ -484,8 +512,8 @@ async def editar_usuario(
     request: Request,
     username: str = Form(...),
     perfil: str = Form(...),
-    password: str = Form(None)
-):
+    password: str = Form(None)):
+    
     user = get_current_user(request)
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
@@ -543,8 +571,8 @@ async def editar_fornecedor(
     nome: str = Form(...),
     cnpj: str = Form(None),
     telefone: str = Form(None),
-    email: str = Form(None)
-):
+    email: str = Form(None)):
+    
     with engine.connect() as conn:
         conn.execute(text("""
             UPDATE fornecedores
@@ -569,8 +597,8 @@ async def novo_fornecedor(
     nome: str = Form(...),
     cnpj: str = Form(None),
     telefone: str = Form(None),
-    email: str = Form(None),
-):
+    email: str = Form(None),):
+
     with engine.connect() as conn:
         conn.execute(text("""
             INSERT INTO fornecedores (nome, cnpj, telefone, email)
@@ -585,6 +613,21 @@ async def novo_fornecedor(
 
     return RedirectResponse(url="/fornecedores", status_code=303)
 
+@app.get("/fornecedores/deletar/{id}")
+async def deletar_fornecedor(request: Request, id: int):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    with engine.connect() as conn:
+        conn.execute(
+            text("DELETE FROM fornecedores WHERE id = :id"),
+            {"id": id}
+        )
+        conn.commit()
+
+    return RedirectResponse(url="/fornecedores", status_code=303)
+
 
 # --- VENDAS ---
 @app.get("/vendas", response_class=HTMLResponse)
@@ -593,8 +636,8 @@ async def pagina_vendas(
     fornecedor_id: str | None = Query(None),
     empresa_id: str | None = Query(None),
     data_inicio: str | None = Query(None),
-    data_fim: str | None = Query(None),
-):
+    data_fim: str | None = Query(None),):
+
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
@@ -627,7 +670,11 @@ async def pagina_vendas(
     query = f"""
         SELECT
             v.id,
+            v.grupo_venda,
             v.data_venda,
+            v.tipo_documento,
+            v.cliente_nome,
+            v.cliente_cpf_cnpj,
             v.quantidade,
             v.preco_unitario,
             v.total,
@@ -683,50 +730,132 @@ async def pagina_vendas(
     })
 
 @app.post("/vendas/nova")
-async def registrar_venda(request: Request, produto_id: int = Form(...), qtd_venda: float = Form(...)):
+async def registrar_venda(
+    request: Request,
+    tipo_documento: str = Form(...),
+    empresa_id: int = Form(...),
+    cliente_nome: str = Form(...),
+    cliente_cpf_cnpj: str = Form(""),
+    cliente_email: str = Form(""),
+    cliente_telefone: str = Form(""),
+    produto_id: list[int] = Form(...),
+    qtd_venda: list[float] = Form(...)):
+
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
-    
+
+    if len(produto_id) != len(qtd_venda):
+        return RedirectResponse(url="/vendas", status_code=303)
+
+    grupo_venda = str(uuid.uuid4())
+    data_venda = datetime.now()
+    status_documento = "pendente_nfe" if tipo_documento == "nfe" else "gerado"
+
     with engine.connect() as conn:
-        prod = conn.execute(
-            text("""SELECT nome, cor, tamanho, quantidade, preco FROM produtos WHERE id = :id"""),
-            {"id": produto_id}
-        ).fetchone()
+        ids_vendas = []
+        total_geral = 0.0
+        itens_log = []
 
-        if prod and float(prod.quantidade) >= qtd_venda:
+        for i in range(len(produto_id)):
+            prod_id = int(produto_id[i])
+            qtd = float(qtd_venda[i])
+
+            if qtd <= 0:
+                continue
+
+            prod = conn.execute(text("""
+                SELECT id, nome, cor, tamanho, quantidade, preco, empresa_id
+                FROM produtos
+                WHERE id = :id
+            """), {"id": prod_id}).fetchone()
+
+            if not prod:
+                return RedirectResponse(url="/vendas", status_code=303)
+
+            if float(prod.quantidade) < qtd:
+                return RedirectResponse(url="/vendas", status_code=303)
+
             preco_unitario = float(prod.preco)
-            total = qtd_venda * preco_unitario
-            data_venda = datetime.now()
+            total = qtd * preco_unitario
+            total_geral += total
 
-            conn.execute(text("""
-                INSERT INTO vendas (produto_id, quantidade, preco_unitario, total, data_venda)
-                VALUES (:produto_id, :quantidade, :preco_unitario, :total, :data_venda)
+            resultado = conn.execute(text("""
+                INSERT INTO vendas (
+                    grupo_venda,
+                    produto_id,
+                    empresa_id,
+                    tipo_documento,
+                    cliente_nome,
+                    cliente_cpf_cnpj,
+                    cliente_email,
+                    cliente_telefone,
+                    status_documento,
+                    quantidade,
+                    preco_unitario,
+                    total,
+                    data_venda
+                )
+                VALUES (
+                    :grupo_venda,
+                    :produto_id,
+                    :empresa_id,
+                    :tipo_documento,
+                    :cliente_nome,
+                    :cliente_cpf_cnpj,
+                    :cliente_email,
+                    :cliente_telefone,
+                    :status_documento,
+                    :quantidade,
+                    :preco_unitario,
+                    :total,
+                    :data_venda
+                )
+                RETURNING id
             """), {
-                "produto_id": produto_id,
-                "quantidade": qtd_venda,
+                "grupo_venda": grupo_venda,
+                "produto_id": prod_id,
+                "empresa_id": empresa_id,
+                "tipo_documento": tipo_documento,
+                "cliente_nome": cliente_nome,
+                "cliente_cpf_cnpj": cliente_cpf_cnpj,
+                "cliente_email": cliente_email,
+                "cliente_telefone": cliente_telefone,
+                "status_documento": status_documento,
+                "quantidade": qtd,
                 "preco_unitario": preco_unitario,
                 "total": total,
                 "data_venda": data_venda
             })
+
+            venda_id = resultado.fetchone().id
+            ids_vendas.append(venda_id)
 
             conn.execute(text("""
                 UPDATE produtos
                 SET quantidade = quantidade - :qtd
                 WHERE id = :id
             """), {
-                "qtd": qtd_venda,
-                "id": produto_id
+                "qtd": qtd,
+                "id": prod_id
             })
 
-            conn.commit()
+            itens_log.append(f"{prod.nome} (qtd: {qtd}, total: R$ {total:.2f})")
 
-            registrar_log(
-                user.id,
-                user.username,
-                "VENDA",
-                f"Produto: {prod.nome}, cor: {prod.cor}, tamanho: {prod.tamanho}, qtd: {qtd_venda}, total: {total}"
-            )
+        if not ids_vendas:
+            return RedirectResponse(url="/vendas", status_code=303)
+
+        conn.commit()
+
+    registrar_log(
+        user.id,
+        user.username,
+        "VENDA",
+        f"Grupo: {grupo_venda} | Cliente: {cliente_nome} | Tipo: {tipo_documento} | Itens: {'; '.join(itens_log)} | Total geral: R$ {total_geral:.2f}"
+    )
+
+    if tipo_documento == "comprovante":
+        return RedirectResponse(url=f"/vendas/comprovante/grupo/{grupo_venda}", status_code=303)
 
     return RedirectResponse(url="/vendas", status_code=303)
 
@@ -736,8 +865,8 @@ async def relatorio_vendas_pdf(
     fornecedor_id: str | None = Query(None),
     empresa_id: str | None = Query(None),
     data_inicio: str | None = Query(None),
-    data_fim: str | None = Query(None),
-):
+    data_fim: str | None = Query(None),):
+
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
@@ -853,6 +982,228 @@ async def relatorio_vendas_pdf(
         headers={"Content-Disposition": "inline; filename=relatorio_vendas.pdf"}
     )
 
+@app.get("/vendas/comprovante/{venda_id}")
+async def gerar_comprovante_venda(venda_id: int, request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    with engine.connect() as conn:
+        venda = conn.execute(text("""
+            SELECT
+                v.id,
+                v.data_venda,
+                v.tipo_documento,
+                v.cliente_nome,
+                v.cliente_cpf_cnpj,
+                v.cliente_email,
+                v.cliente_telefone,
+                v.quantidade,
+                v.preco_unitario,
+                v.total,
+                p.nome AS produto_nome,
+                p.cor,
+                p.tamanho,
+                e.nome_fantasia AS empresa_nome,
+                e.cnpj AS empresa_cnpj
+            FROM vendas v
+            JOIN produtos p ON p.id = v.produto_id
+            LEFT JOIN empresas e ON e.id = v.empresa_id
+            WHERE v.id = :venda_id
+        """), {"venda_id": venda_id}).fetchone()
+
+    if not venda:
+        return RedirectResponse(url="/vendas", status_code=303)
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    largura, altura = A4
+
+    y = altura - 50
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(50, y, "Comprovante de Venda")
+
+    y -= 30
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(50, y, f"Venda nº: {venda.id}")
+    y -= 18
+    pdf.drawString(50, y, f"Data: {str(venda.data_venda)[:16]}")
+    y -= 18
+    pdf.drawString(50, y, f"Empresa: {venda.empresa_nome or '-'}")
+    y -= 18
+    pdf.drawString(50, y, f"CNPJ da empresa: {venda.empresa_cnpj or '-'}")
+
+    y -= 28
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(50, y, "Dados do cliente")
+    y -= 20
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(50, y, f"Nome: {venda.cliente_nome or '-'}")
+    y -= 18
+    pdf.drawString(50, y, f"CPF/CNPJ: {venda.cliente_cpf_cnpj or '-'}")
+    y -= 18
+    pdf.drawString(50, y, f"E-mail: {venda.cliente_email or '-'}")
+    y -= 18
+    pdf.drawString(50, y, f"Telefone: {venda.cliente_telefone or '-'}")
+
+    y -= 28
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(50, y, "Produto")
+    y -= 20
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(50, y, f"Nome: {venda.produto_nome}")
+    y -= 18
+    pdf.drawString(50, y, f"Cor: {venda.cor or '-'}")
+    y -= 18
+    pdf.drawString(50, y, f"Tamanho: {venda.tamanho or '-'}")
+    y -= 18
+    pdf.drawString(50, y, f"Quantidade: {venda.quantidade}")
+    y -= 18
+    pdf.drawString(50, y, f"Preço unitário: R$ {float(venda.preco_unitario):.2f}")
+    y -= 18
+    pdf.drawString(50, y, f"Total: R$ {float(venda.total):.2f}")
+
+    y -= 35
+    pdf.setFont("Helvetica-Oblique", 9)
+    pdf.drawString(50, y, "Este documento é um comprovante interno de venda e não substitui a nota fiscal eletrônica.")
+
+    pdf.save()
+    buffer.seek(0)
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=comprovante_venda_{venda.id}.pdf"}
+    )
+
+@app.get("/vendas/comprovante/grupo/{grupo_venda}")
+async def gerar_comprovante_grupo(grupo_venda: str, request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    with engine.connect() as conn:
+        itens = conn.execute(text("""
+            SELECT
+                v.id,
+                v.grupo_venda,
+                v.data_venda,
+                v.tipo_documento,
+                v.cliente_nome,
+                v.cliente_cpf_cnpj,
+                v.cliente_email,
+                v.cliente_telefone,
+                v.quantidade,
+                v.preco_unitario,
+                v.total,
+                p.nome AS produto_nome,
+                p.cor,
+                p.tamanho,
+                e.nome_fantasia AS empresa_nome,
+                e.cnpj AS empresa_cnpj
+            FROM vendas v
+            JOIN produtos p ON p.id = v.produto_id
+            LEFT JOIN empresas e ON e.id = v.empresa_id
+            WHERE v.grupo_venda = :grupo_venda
+            ORDER BY v.id
+        """), {"grupo_venda": grupo_venda}).fetchall()
+
+    if not itens:
+        return RedirectResponse(url="/vendas", status_code=303)
+
+    venda_base = itens[0]
+    total_geral = sum(float(item.total or 0) for item in itens)
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    largura, altura = A4
+
+    y = altura - 50
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(50, y, "Comprovante de Venda")
+
+    y -= 30
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(50, y, f"Grupo da venda: {venda_base.grupo_venda}")
+    y -= 18
+    pdf.drawString(50, y, f"Data: {str(venda_base.data_venda)[:16]}")
+    y -= 18
+    pdf.drawString(50, y, f"Empresa: {venda_base.empresa_nome or '-'}")
+    y -= 18
+    pdf.drawString(50, y, f"CNPJ da empresa: {venda_base.empresa_cnpj or '-'}")
+
+    y -= 28
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(50, y, "Dados do cliente")
+
+    y -= 20
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(50, y, f"Nome: {venda_base.cliente_nome or '-'}")
+    y -= 18
+    pdf.drawString(50, y, f"CPF/CNPJ: {venda_base.cliente_cpf_cnpj or '-'}")
+    y -= 18
+    pdf.drawString(50, y, f"E-mail: {venda_base.cliente_email or '-'}")
+    y -= 18
+    pdf.drawString(50, y, f"Telefone: {venda_base.cliente_telefone or '-'}")
+
+    y -= 28
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(50, y, "Itens da venda")
+
+    y -= 20
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(50, y, "Produto")
+    pdf.drawString(260, y, "Qtd")
+    pdf.drawString(320, y, "Preço Unit.")
+    pdf.drawString(430, y, "Total")
+
+    y -= 15
+    pdf.setFont("Helvetica", 9)
+
+    for item in itens:
+        if y < 60:
+            pdf.showPage()
+            y = altura - 50
+            pdf.setFont("Helvetica-Bold", 12)
+            pdf.drawString(50, y, "Itens da venda")
+            y -= 20
+            pdf.setFont("Helvetica-Bold", 9)
+            pdf.drawString(50, y, "Produto")
+            pdf.drawString(260, y, "Qtd")
+            pdf.drawString(320, y, "Preço Unit.")
+            pdf.drawString(430, y, "Total")
+            y -= 15
+            pdf.setFont("Helvetica", 9)
+
+        descricao = item.produto_nome or "-"
+        if item.cor:
+            descricao += f" | Cor: {item.cor}"
+        if item.tamanho:
+            descricao += f" | Tam: {item.tamanho}"
+
+        pdf.drawString(50, y, descricao[:38])
+        pdf.drawString(260, y, str(item.quantidade))
+        pdf.drawString(320, y, f"R$ {float(item.preco_unitario):.2f}")
+        pdf.drawString(430, y, f"R$ {float(item.total):.2f}")
+        y -= 16
+
+    y -= 10
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(50, y, f"Total geral: R$ {total_geral:.2f}")
+
+    y -= 30
+    pdf.setFont("Helvetica-Oblique", 9)
+    pdf.drawString(50, y, "Este documento é um comprovante interno de venda e não substitui a nota fiscal eletrônica.")
+
+    pdf.save()
+    buffer.seek(0)
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=comprovante_grupo_{grupo_venda}.pdf"}
+    )
+
 
 # --- EMPRESAS ---
 @app.get("/empresas", response_class=HTMLResponse)
@@ -877,8 +1228,8 @@ async def nova_empresa(
     razao_social: str = Form(...),
     cnpj: str = Form(""),
     tel: str = Form(""),
-    email: str = Form("")
-):
+    email: str = Form("")):
+
     with engine.connect() as conn:
         conn.execute(text("""
             INSERT INTO empresas (nome_fantasia, razao_social, cnpj, telefone, email)
@@ -931,8 +1282,8 @@ async def atualizar_empresa(
     nome: str = Form(...),
     cnpj: str = Form(...),
     tel: str = Form(...),
-    email: str = Form(...)
-):
+    email: str = Form(...)):
+
     with engine.connect() as conn:
         conn.execute(text("""
             UPDATE empresas
@@ -959,8 +1310,8 @@ async def listar_logs(
     request: Request,
     acao: str = Query(None),
     usuario: str = Query(None),
-    page: int = Query(1, ge=1)
-):
+    page: int = Query(1, ge=1)):
+
     user = get_current_user(request)
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
@@ -1028,8 +1379,8 @@ async def banco_horas(
     request: Request,
     usuario: str = Query(None),
     data_inicio: date = Query(None),
-    data_fim: date = Query(None)
-):
+    data_fim: date = Query(None)):
+
     user = get_current_user(request)
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
@@ -1119,14 +1470,13 @@ async def banco_horas(
         "total_horas_formatado": total_horas_formatado
     })
 
-
 @app.get("/banco-horas/pdf")
 async def banco_horas_pdf(
     request: Request,
     usuario: str = Query(None),
     data_inicio: date = Query(None),
-    data_fim: date = Query(None)
-):
+    data_fim: date = Query(None)):
+
     user = get_current_user(request)
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
