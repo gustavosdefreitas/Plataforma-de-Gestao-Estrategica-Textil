@@ -488,6 +488,7 @@ class TestProdutos:
 
     def test_deletar_produto_sem_auth(self, client_app, produto_id):
         """Deletar produto sem sessão deve redirecionar para login."""
+        client_app.cookies.clear()
         resp = client_app.get(f"/produtos/deletar/{produto_id}")
         assert resp.status_code == 303
         assert "login" in resp.headers["location"]
@@ -530,6 +531,7 @@ class TestVendas:
 
     def test_venda_sem_auth(self, client_app, produto_id, empresa_id):
         """POST /vendas/nova sem sessão deve redirecionar para login."""
+        client_app.cookies.clear()
         resp = client_app.post(
             "/vendas/nova",
             data={
