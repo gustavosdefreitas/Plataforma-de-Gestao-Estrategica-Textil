@@ -21,24 +21,24 @@
 <div class="card p-4">
   <h3>Editar Produto</h3>
   <form action="/produtos/editar/{{ produto.id }}" method="post">
-    
-    <label>Nome do Produto:</label>
-    <input type="text" name="nome" value="{{ produto.nome }}" class="input-gestao">
 
-    <label>Quantidade:</label>
-    <input type="number" name="quantidade" step="0.01" value="{{ produto.quantidade }}" class="input-gestao">
-    
-    <label>Cor:</label>
-    <input type="text" name="cor" value="{{ produto.cor or '' }}" class="form-control">
+    <label for="editar_nome">Nome do Produto:</label>
+    <input type="text" id="editar_nome" name="nome" value="{{ produto.nome }}" class="input-gestao">
 
-    <label>Tamanho:</label>
-    <input type="text" name="tamanho" value="{{ produto.tamanho or '' }}" class="form-control">
+    <label for="editar_quantidade">Quantidade:</label>
+    <input type="number" id="editar_quantidade" name="quantidade" step="0.01" value="{{ produto.quantidade }}" class="input-gestao">
 
-    <label>Preço:</label>
-    <input type="number" name="preco" step="0.01" value="{{ produto.preco }}" class="input-gestao">
+    <label for="editar_cor">Cor:</label>
+    <input type="text" id="editar_cor" name="cor" value="{{ produto.cor or '' }}" class="form-control">
 
-    <label>Empresa:</label>
-    <select name="empresa_id" class="input-gestao">
+    <label for="editar_tamanho">Tamanho:</label>
+    <input type="text" id="editar_tamanho" name="tamanho" value="{{ produto.tamanho or '' }}" class="form-control">
+
+    <label for="editar_preco">Preço:</label>
+    <input type="number" id="editar_preco" name="preco" step="0.01" value="{{ produto.preco }}" class="input-gestao">
+
+    <label for="editar_empresa_id">Empresa:</label>
+    <select id="editar_empresa_id" name="empresa_id" class="input-gestao">
         {% for e in empresas %}
             <option value="{{ e.id }}" {% if e.id == produto.empresa_id %}selected{% endif %}>{{ e.nome_fantasia }}</option>
         {% endfor %}

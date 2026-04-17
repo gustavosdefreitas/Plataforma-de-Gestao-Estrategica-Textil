@@ -5,7 +5,7 @@
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
-        <h2 class="fw-bold mb-1"><i class="fas fa-chart-pie me-2 text-primary"></i>Resumo do Sistema</h2>
+        <h2 class="fw-bold mb-1"><i class="fas fa-chart-pie me-2 text-primary" aria-hidden="true"></i>Resumo do Sistema</h2>
         <p class="text-muted mb-0">Bem-vindo de volta, <strong>{{ user.username }}</strong>!</p>
     </div>
 </div>
@@ -16,11 +16,11 @@
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body d-flex align-items-center">
                 <div class="flex-shrink-0 bg-primary text-white p-3 rounded-3">
-                    <i class="fas fa-boxes fa-2x"></i>
+                    <i class="fas fa-boxes fa-2x" aria-hidden="true"></i>
                 </div>
                 <div class="flex-grow-1 ms-3">
                     <h6 class="text-muted mb-0">Produtos Cadastrados</h6>
-                    <h3 class="mb-0 fw-bold">{{ total_produtos }}</h3>
+                    <h3 class="mb-0 fw-bold"><span class="visually-hidden">Total de produtos cadastrados: </span>{{ total_produtos }}</h3>
                     <small class="text-muted">{{ "%.0f"|format(total_unidades) }} unid. em estoque</small>
                 </div>
             </div>
@@ -31,11 +31,11 @@
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body d-flex align-items-center">
                 <div class="flex-shrink-0 bg-success text-white p-3 rounded-3">
-                    <i class="fas fa-cart-shopping fa-2x"></i>
+                    <i class="fas fa-cart-shopping fa-2x" aria-hidden="true"></i>
                 </div>
                 <div class="flex-grow-1 ms-3">
                     <h6 class="text-muted mb-0">Vendas do Mês</h6>
-                    <h3 class="mb-0 fw-bold">{{ total_vendas }}</h3>
+                    <h3 class="mb-0 fw-bold"><span class="visually-hidden">Total de vendas no mês: </span>{{ total_vendas }}</h3>
                     <small class="text-muted">transações registradas</small>
                 </div>
             </div>
@@ -46,11 +46,11 @@
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body d-flex align-items-center">
                 <div class="flex-shrink-0 bg-danger text-white p-3 rounded-3">
-                    <i class="fas fa-dollar-sign fa-2x"></i>
+                    <i class="fas fa-dollar-sign fa-2x" aria-hidden="true"></i>
                 </div>
                 <div class="flex-grow-1 ms-3">
                     <h6 class="text-muted mb-0">Faturamento do Mês</h6>
-                    <h3 class="mb-0 fw-bold">R$ {{ "%.2f"|format(total_vendas_valor) }}</h3>
+                    <h3 class="mb-0 fw-bold"><span class="visually-hidden">Faturamento do mês: </span>R$ {{ "%.2f"|format(total_vendas_valor) }}</h3>
                     <small class="text-muted">mês atual</small>
                 </div>
             </div>
@@ -61,11 +61,11 @@
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body d-flex align-items-center">
                 <div class="flex-shrink-0 bg-warning text-dark p-3 rounded-3">
-                    <i class="fas fa-truck fa-2x"></i>
+                    <i class="fas fa-truck fa-2x" aria-hidden="true"></i>
                 </div>
                 <div class="flex-grow-1 ms-3">
                     <h6 class="text-muted mb-0">Fornecedores</h6>
-                    <h3 class="mb-0 fw-bold">{{ total_fornecedores }}</h3>
+                    <h3 class="mb-0 fw-bold"><span class="visually-hidden">Total de fornecedores cadastrados: </span>{{ total_fornecedores }}</h3>
                     <small class="text-muted">{{ total_empresas }} empresa(s) ativa(s)</small>
                 </div>
             </div>
@@ -79,7 +79,7 @@
         <div class="card shadow-sm border-0 h-100">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h5 class="mb-0 fw-bold text-primary">
-                    <i class="fas fa-chart-bar me-2"></i>Estoque por Empresa
+                    <i class="fas fa-chart-bar me-2" aria-hidden="true"></i>Estoque por Empresa
                 </h5>
                 <span class="badge bg-light text-muted border">
                     {{ "%.0f"|format(total_unidades) }} unidades totais
@@ -87,7 +87,7 @@
             </div>
             <div class="card-body">
                 <div style="height: 320px;">
-                    <canvas id="meuGrafico"></canvas>
+                    <canvas id="meuGrafico" role="img" aria-label="Gráfico de barras horizontais com o estoque total de unidades por empresa"></canvas>
                 </div>
             </div>
         </div>
@@ -97,29 +97,29 @@
         <div class="card shadow-sm border-0 h-100">
             <div class="card-body d-flex flex-column justify-content-between p-4">
                 <div>
-                    <h5 class="fw-bold mb-3"><i class="fas fa-bolt me-2 text-warning"></i>Acesso Rápido</h5>
+                    <h5 class="fw-bold mb-3"><i class="fas fa-bolt me-2 text-warning" aria-hidden="true"></i>Acesso Rápido</h5>
                     <div class="d-grid gap-2">
                         <a href="/vendas" class="btn btn-primary text-start">
-                            <i class="fas fa-cart-plus me-2"></i>Nova Venda
+                            <i class="fas fa-cart-plus me-2" aria-hidden="true"></i>Nova Venda
                         </a>
                         {% if user and user.perfil == 'admin' %}
                         <a href="/produtos" class="btn btn-outline-primary text-start">
-                            <i class="fas fa-plus me-2"></i>Adicionar Produto
+                            <i class="fas fa-plus me-2" aria-hidden="true"></i>Adicionar Produto
                         </a>
                         <a href="/produtos" class="btn btn-outline-secondary text-start">
-                            <i class="fas fa-list me-2"></i>Ver Inventário
+                            <i class="fas fa-list me-2" aria-hidden="true"></i>Ver Inventário
                         </a>
                         <a href="/fornecedores" class="btn btn-outline-secondary text-start">
-                            <i class="fas fa-truck me-2"></i>Ver Fornecedores
+                            <i class="fas fa-truck me-2" aria-hidden="true"></i>Ver Fornecedores
                         </a>
                         {% endif %}
                         <a href="/vendas" class="btn btn-outline-success text-start">
-                            <i class="fas fa-history me-2"></i>Histórico de Vendas
+                            <i class="fas fa-history me-2" aria-hidden="true"></i>Histórico de Vendas
                         </a>
                     </div>
                 </div>
                 <p class="text-muted small mb-0 mt-3">
-                    <i class="fas fa-clock me-1"></i>Sistema atualizado em tempo real.
+                    <i class="fas fa-clock me-1" aria-hidden="true"></i>Sistema atualizado em tempo real.
                 </p>
             </div>
         </div>
@@ -133,13 +133,13 @@
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h5 class="mb-0 fw-bold text-primary">
-                    <i class="fas fa-chart-line me-2"></i>Faturamento por Empresa — Últimos 6 Meses
+                    <i class="fas fa-chart-line me-2" aria-hidden="true"></i>Faturamento por Empresa — Últimos 6 Meses
                 </h5>
                 <a href="/vendas" class="btn btn-sm btn-outline-primary">Ver vendas</a>
             </div>
             <div class="card-body">
                 <div style="height: 280px;">
-                    <canvas id="graficoVendasEmpresa"></canvas>
+                    <canvas id="graficoVendasEmpresa" role="img" aria-label="Gráfico de linhas do faturamento por empresa nos últimos 6 meses"></canvas>
                 </div>
             </div>
         </div>
@@ -153,21 +153,22 @@
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h5 class="mb-0 fw-bold">
-                    <i class="fas fa-history me-2"></i>Vendas Recentes
+                    <i class="fas fa-history me-2" aria-hidden="true"></i>Vendas Recentes
                 </h5>
                 <a href="/vendas" class="btn btn-sm btn-outline-primary">Ver todas</a>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
+                        <caption class="visually-hidden">Lista das vendas mais recentes registradas no sistema</caption>
                         <thead class="table-light">
                             <tr>
-                                <th class="ps-3">Data</th>
-                                <th>Produto</th>
-                                <th>Cor</th>
-                                <th>Tamanho</th>
-                                <th>Qtd</th>
-                                <th>Total</th>
+                                <th scope="col" class="ps-3">Data</th>
+                                <th scope="col">Produto</th>
+                                <th scope="col">Cor</th>
+                                <th scope="col">Tamanho</th>
+                                <th scope="col">Qtd</th>
+                                <th scope="col">Total</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -183,7 +184,7 @@
                             {% else %}
                             <tr>
                                 <td colspan="6" class="text-center text-muted py-5">
-                                    <i class="fas fa-shopping-cart fa-2x mb-2 d-block opacity-25"></i>
+                                    <i class="fas fa-shopping-cart fa-2x mb-2 d-block opacity-25" aria-hidden="true"></i>
                                     Nenhuma venda registrada ainda.
                                 </td>
                             </tr>

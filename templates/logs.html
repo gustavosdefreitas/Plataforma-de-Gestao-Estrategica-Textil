@@ -6,13 +6,13 @@
 <div class="card shadow-sm border-0">
     <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
         <h4 class="mb-0 fw-bold text-primary">
-	    <i class="fas fa-clipboard-list me-2"></i> Logs do Sistema</h4>
+	    <i class="fas fa-clipboard-list me-2" aria-hidden="true"></i> Logs do Sistema</h4>
     </div>
     <div class="card-body">
         <form method="get" action="/logs" class="row g-3">
             <div class="col-md-4">
-                <label class="form-label">Ação</label>
-                <select name="acao" class="form-select">
+                <label for="filtro_acao" class="form-label">Ação</label>
+                <select id="filtro_acao" name="acao" class="form-select">
                     <option value="">Todas</option>
                     {% for item in acoes_disponiveis %}
                         <option value="{{ item.acao }}" {% if filtro_acao == item.acao %}selected{% endif %}>
@@ -23,13 +23,13 @@
             </div>
 
             <div class="col-md-4">
-                <label class="form-label">Usuário</label>
-                <input type="text" name="usuario" class="form-control" value="{{ filtro_usuario or '' }}" placeholder="Digite o nome do usuário">
+                <label for="filtro_usuario_logs" class="form-label">Usuário</label>
+                <input type="text" id="filtro_usuario_logs" name="usuario" class="form-control" value="{{ filtro_usuario or '' }}" placeholder="Digite o nome do usuário">
             </div>
 
             <div class="col-md-4 d-flex align-items-end gap-2">
                 <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-search me-1"></i> Filtrar
+                    <i class="fas fa-search me-1" aria-hidden="true"></i> Filtrar
                 </button>
                 <a href="/logs" class="btn btn-outline-secondary">
                     Limpar
@@ -43,12 +43,13 @@
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
+                <caption class="visually-hidden">Registros de logs do sistema</caption>
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3">Data</th>
-                        <th>Usuário</th>
-                        <th>Ação</th>
-                        <th>Detalhes</th>
+                        <th scope="col" class="ps-3">Data</th>
+                        <th scope="col">Usuário</th>
+                        <th scope="col">Ação</th>
+                        <th scope="col">Detalhes</th>
                     </tr>
                 </thead>
                 <tbody>

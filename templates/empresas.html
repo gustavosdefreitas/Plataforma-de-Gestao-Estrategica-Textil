@@ -6,22 +6,23 @@
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
         <h4 class="mb-0 fw-bold text-primary">
-            <i class="fas fa-city me-2"></i>Empresas Cadastradas
+            <i class="fas fa-city me-2" aria-hidden="true"></i>Empresas Cadastradas
         </h4>
         <button class="btn btn-dark btn-sm shadow-sm" data-bs-toggle="modal" data-bs-target="#modalEmpresa">
-            <i class="fas fa-plus me-1"></i> Nova Empresa
+            <i class="fas fa-plus me-1" aria-hidden="true"></i> Nova Empresa
         </button>
     </div>
 
     <div class="card-body">
         <div class="table-responsive">
             <table class="table table-hover align-middle">
+                <caption class="visually-hidden">Lista de empresas cadastradas</caption>
                 <thead class="table-light">
                     <tr>
-                        <th>Nome Fantasia</th>
-                        <th>CNPJ</th>
-                        <th>Contato</th>
-                        <th class="text-center">Ações</th>
+                        <th scope="col">Nome Fantasia</th>
+                        <th scope="col">CNPJ</th>
+                        <th scope="col">Contato</th>
+                        <th scope="col" class="text-center">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -34,11 +35,11 @@
                             <small class="text-muted">{{ e.telefone }}</small>
                         </td>
                         <td class="text-center">
-                            <a href="/empresas/editar/{{ e.id }}" class="btn btn-outline-primary btn-sm me-1">
-                                <i class="fas fa-edit"></i>
+                            <a href="/empresas/editar/{{ e.id }}" class="btn btn-outline-primary btn-sm me-1" aria-label="Editar empresa {{ e.nome_fantasia }}">
+                                <i class="fas fa-edit" aria-hidden="true"></i>
                             </a>
-                            <a href="/empresas/deletar/{{ e.id }}" class="btn btn-outline-danger btn-sm" onclick="return confirm('Excluir esta empresa?')">
-                                <i class="fas fa-trash"></i>
+                            <a href="/empresas/deletar/{{ e.id }}" class="btn btn-outline-danger btn-sm" onclick="return confirm('Excluir esta empresa?')" aria-label="Excluir empresa {{ e.nome_fantasia }}">
+                                <i class="fas fa-trash" aria-hidden="true"></i>
                             </a>
                         </td>
                     </tr>
@@ -53,29 +54,33 @@
     </div>
 </div>
 
-<div class="modal fade" id="modalEmpresa" tabindex="-1">
+<div class="modal fade" id="modalEmpresa" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="modalEmpresaLabel" aria-hidden="true">
     <div class="modal-dialog">
         <form action="/empresas/nova" method="POST" class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Cadastrar Empresa</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="modalEmpresaLabel">Cadastrar Empresa</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
             </div>
 
             <div class="modal-body">
-                <label class="form-label fw-bold">CNPJ</label>
+                <label for="cnpj" class="form-label fw-bold">CNPJ</label>
                 <div class="input-group mb-3">
                     <input type="text" id="cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="form-control" required>
                     <button type="button" class="btn btn-outline-primary" onclick="consultarCNPJ()">
-                        <i class="fas fa-search me-1"></i> Buscar CNPJ
+                        <i class="fas fa-search me-1" aria-hidden="true"></i> Buscar CNPJ
                     </button>
                 </div>
 
+                <label for="nome" class="visually-hidden">Nome Fantasia</label>
                 <input type="text" id="nome" name="nome" placeholder="Nome Fantasia" class="form-control mb-3" required>
+                <label for="razao_social" class="visually-hidden">Razão Social</label>
                 <input type="text" id="razao_social" name="razao_social" placeholder="Razão Social" class="form-control mb-3" required>
+                <label for="tel" class="visually-hidden">Telefone</label>
                 <input type="text" id="tel" name="tel" placeholder="Telefone" class="form-control mb-3">
+                <label for="email" class="visually-hidden">E-mail</label>
                 <input type="email" id="email" name="email" placeholder="E-mail" class="form-control mb-3">
 
-                <div id="cnpj-status" class="small text-muted"></div>
+                <div id="cnpj-status" class="small text-muted" role="status" aria-live="polite"></div>
             </div>
 
             <div class="modal-footer">
