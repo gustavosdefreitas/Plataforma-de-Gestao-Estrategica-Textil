@@ -19,11 +19,7 @@ import uuid
 import uvicorn
 
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL não configurada.")
-    
+# Usa DATABASE_URL do ambiente (produção) ou fallback local para desenvolvimento
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/test_db")
 DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
@@ -567,12 +563,17 @@ async def listar_fornecedores(request: Request):
 
 @app.post("/fornecedores/editar/{id}")
 async def editar_fornecedor(
+    request: Request,
     id: int,
     nome: str = Form(...),
     cnpj: str = Form(None),
     telefone: str = Form(None),
     email: str = Form(None)):
-    
+
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     with engine.connect() as conn:
         conn.execute(text("""
             UPDATE fornecedores
@@ -594,10 +595,15 @@ async def editar_fornecedor(
 
 @app.post("/fornecedores/novo")
 async def novo_fornecedor(
+    request: Request,
     nome: str = Form(...),
     cnpj: str = Form(None),
     telefone: str = Form(None),
-    email: str = Form(None),):
+    email: str = Form(None)):
+
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
 
     with engine.connect() as conn:
         conn.execute(text("""
@@ -1591,7 +1597,11 @@ async def banco_horas_pdf(
 
 # --- API ---
 @app.get("/api/produtos/{empresa_id}")
-async def api_listar_produtos(empresa_id: int):
+async def api_listar_produtos(request: Request, empresa_id: int):
+    user = get_current_user(request)
+    if not user:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=401, content={"erro": "Não autenticado"})
     with engine.connect() as conn:
         produtos = conn.execute(text("""
             SELECT nome, quantidade, preco
