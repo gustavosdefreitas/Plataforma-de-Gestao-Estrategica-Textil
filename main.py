@@ -142,6 +142,13 @@ async def lifespan(app: FastAPI):
             ADD COLUMN IF NOT EXISTS grupo_venda VARCHAR(36)
         """))
 
+        conn.execute(text("CREATE SEQUENCE IF NOT EXISTS seq_numero_venda START 1"))
+
+        conn.execute(text("""
+            ALTER TABLE vendas
+            ADD COLUMN IF NOT EXISTS numero_venda INTEGER
+        """))
+
         conn.execute(text("""
             INSERT INTO usuarios (username, password, perfil)
             VALUES ('admin', :senha, 'admin')
@@ -812,6 +819,7 @@ async def pagina_vendas(
         SELECT
             v.id,
             v.grupo_venda,
+            v.numero_venda,
             v.data_venda,
             v.tipo_documento,
             v.cliente_nome,
@@ -894,6 +902,7 @@ async def registrar_venda(
     status_documento = "pendente_nfe" if tipo_documento == "nfe" else "gerado"
 
     with engine.connect() as conn:
+        numero_venda = conn.execute(text("SELECT nextval('seq_numero_venda')")).scalar()
         ids_vendas = []
         total_geral = 0.0
         itens_log = []
@@ -924,6 +933,7 @@ async def registrar_venda(
             resultado = conn.execute(text("""
                 INSERT INTO vendas (
                     grupo_venda,
+                    numero_venda,
                     produto_id,
                     empresa_id,
                     tipo_documento,
@@ -939,6 +949,7 @@ async def registrar_venda(
                 )
                 VALUES (
                     :grupo_venda,
+                    :numero_venda,
                     :produto_id,
                     :empresa_id,
                     :tipo_documento,
@@ -955,6 +966,7 @@ async def registrar_venda(
                 RETURNING id
             """), {
                 "grupo_venda": grupo_venda,
+                "numero_venda": numero_venda,
                 "produto_id": prod_id,
                 "empresa_id": empresa_id,
                 "tipo_documento": tipo_documento,
@@ -992,7 +1004,7 @@ async def registrar_venda(
         user.id,
         user.username,
         "VENDA",
-        f"Grupo: {grupo_venda} | Cliente: {cliente_nome} | Tipo: {tipo_documento} | Itens: {'; '.join(itens_log)} | Total geral: R$ {total_geral:.2f}"
+        f"Venda: #{numero_venda:06d} | Grupo: {grupo_venda} | Cliente: {cliente_nome} | Tipo: {tipo_documento} | Itens: {'; '.join(itens_log)} | Total geral: R$ {total_geral:.2f}"
     )
 
     if tipo_documento == "comprovante":
@@ -1228,6 +1240,7 @@ async def gerar_comprovante_grupo(grupo_venda: str, request: Request):
             SELECT
                 v.id,
                 v.grupo_venda,
+                v.numero_venda,
                 v.data_venda,
                 v.tipo_documento,
                 v.cliente_nome,
@@ -1265,7 +1278,8 @@ async def gerar_comprovante_grupo(grupo_venda: str, request: Request):
 
     y -= 30
     pdf.setFont("Helvetica", 10)
-    pdf.drawString(50, y, f"Grupo da venda: {venda_base.grupo_venda}")
+    numero_fmt = f"#{venda_base.numero_venda:06d}" if venda_base.numero_venda else "—"
+    pdf.drawString(50, y, f"Nº da Venda: {numero_fmt}")
     y -= 18
     pdf.drawString(50, y, f"Data: {str(venda_base.data_venda)[:16]}")
     y -= 18

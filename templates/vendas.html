@@ -120,7 +120,8 @@
                         <caption class="visually-hidden">Histórico de vendas registradas</caption>
                         <thead class="table-light">
                             <tr>
-                                <th scope="col" class="ps-3">Data/Hora</th>
+                                <th scope="col" class="ps-3">Nº Venda</th>
+                                <th scope="col">Data/Hora</th>
                                 <th scope="col">Cliente</th>
                                 <th scope="col">Produto</th>
                                 <th scope="col">Qtd</th>
@@ -132,7 +133,14 @@
                         <tbody>
                             {% for v in vendas %}
                             <tr>
-                                <td class="ps-3 small text-muted">{{ v.data_venda.strftime('%d/%m/%Y %H:%M') if v.data_venda else '' }}</td>
+                                <td class="ps-3">
+                                    {% if v.numero_venda %}
+                                        <strong>#{{ "%06d" | format(v.numero_venda) }}</strong>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small text-muted">{{ v.data_venda.strftime('%d/%m/%Y %H:%M') if v.data_venda else '' }}</td>
                                 <td>{{ v.cliente_nome }}</td>
                                 <td class="fw-bold">{{ v.produto_nome }}</td>
                                 <td>{{ v.quantidade }}</td>
@@ -156,7 +164,7 @@
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="7" class="text-center py-5 text-muted">
+                                <td colspan="8" class="text-center py-5 text-muted">
                                     <i class="fas fa-info-circle me-1" aria-hidden="true"></i>Nenhuma venda realizada ainda.
                                 </td>
                             </tr>
