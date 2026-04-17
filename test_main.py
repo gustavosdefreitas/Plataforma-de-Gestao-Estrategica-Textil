@@ -70,9 +70,9 @@ def empresa_id(client_app, session_admin):
         data={
             "cnpj": "00.000.000/0001-00",
             "razao_social": "Empresa Teste LTDA",
-            "nome_fantasia": "Empresa Teste",
+            "nome": "Empresa Teste",
             "email": "empresa@teste.com",
-            "telefone": "11999999999",
+            "tel": "11999999999",
         },
         cookies=session_admin,
     )
@@ -265,9 +265,9 @@ class TestEmpresas:
             data={
                 "cnpj": "22.222.222/0001-22",
                 "razao_social": "Razão Social Teste",
-                "nome_fantasia": "Fantasia Teste",
+                "nome": "Fantasia Teste",
                 "email": "teste@empresa.com",
-                "telefone": "11977777777",
+                "tel": "11977777777",
             },
             cookies=session_admin,
         )
