@@ -19,31 +19,40 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from main import app, engine, hash_password
 
-client = TestClient(app, follow_redirects=False)
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+@pytest.fixture(scope="session")
+def client_app():
+    """Inicia o TestClient em modo context manager, disparando o lifespan
+    da app (cria tabelas via Base.metadata.create_all)."""
+    with TestClient(app, follow_redirects=False) as c:
+        yield c
+
+
 @pytest.fixture(autouse=True)
-def limpar_banco():
-    """Garante um estado limpo antes de cada teste."""
+def limpar_banco(client_app):
+    """Garante um estado limpo antes de cada teste.
+    Depende de client_app para garantir que as tabelas já existem."""
     with engine.connect() as conn:
-        conn.execute(text("DELETE FROM vendas"))
-        conn.execute(text("DELETE FROM produtos"))
-        conn.execute(text("DELETE FROM fornecedores"))
-        conn.execute(text("DELETE FROM empresas"))
+        conn.execute(text(
+            "TRUNCATE vendas, produtos, fornecedores, empresas "
+            "RESTART IDENTITY CASCADE"
+        ))
         conn.execute(text("DELETE FROM usuarios WHERE username != 'admin'"))
-        conn.execute(text("UPDATE usuarios SET session_id = NULL WHERE username = 'admin'"))
+        conn.execute(text(
+            "UPDATE usuarios SET session_id = NULL WHERE username = 'admin'"
+        ))
         conn.commit()
     yield
 
 
 @pytest.fixture()
-def session_admin():
+def session_admin(client_app):
     """Faz login como admin e retorna o cookie de sessão."""
-    resp = client.post(
+    resp = client_app.post(
         "/login",
         data={"username": "admin", "password": "123456"},
     )
@@ -54,9 +63,9 @@ def session_admin():
 
 
 @pytest.fixture()
-def empresa_id(session_admin):
+def empresa_id(client_app, session_admin):
     """Cria uma empresa e retorna seu ID."""
-    resp = client.post(
+    resp = client_app.post(
         "/empresas/nova",
         data={
             "cnpj": "00.000.000/0001-00",
@@ -77,9 +86,9 @@ def empresa_id(session_admin):
 
 
 @pytest.fixture()
-def fornecedor_id(session_admin):
+def fornecedor_id(client_app, session_admin):
     """Cria um fornecedor e retorna seu ID."""
-    resp = client.post(
+    resp = client_app.post(
         "/fornecedores/novo",
         data={
             "nome": "Fornecedor Teste",
@@ -99,9 +108,9 @@ def fornecedor_id(session_admin):
 
 
 @pytest.fixture()
-def produto_id(session_admin, empresa_id, fornecedor_id):
+def produto_id(client_app, session_admin, empresa_id, fornecedor_id):
     """Cria um produto e retorna seu ID."""
-    resp = client.post(
+    resp = client_app.post(
         "/produtos/novo",
         data={
             "nome": "Camiseta Teste",
@@ -129,15 +138,15 @@ def produto_id(session_admin, empresa_id, fornecedor_id):
 
 class TestAutenticacao:
 
-    def test_pagina_login_abre(self):
+    def test_pagina_login_abre(self, client_app):
         """GET /login deve retornar 200 com formulário."""
-        resp = client.get("/login")
+        resp = client_app.get("/login")
         assert resp.status_code == 200
         assert "Login" in resp.text
 
-    def test_login_credenciais_validas(self):
+    def test_login_credenciais_validas(self, client_app):
         """Login com admin/123456 deve redirecionar para / e setar cookie."""
-        resp = client.post(
+        resp = client_app.post(
             "/login",
             data={"username": "admin", "password": "123456"},
         )
@@ -145,9 +154,9 @@ class TestAutenticacao:
         assert resp.headers["location"] == "/"
         assert "session_id" in resp.cookies
 
-    def test_login_senha_errada(self):
+    def test_login_senha_errada(self, client_app):
         """Login com senha incorreta deve retornar 200 com mensagem de erro."""
-        resp = client.post(
+        resp = client_app.post(
             "/login",
             data={"username": "admin", "password": "senha_errada"},
             follow_redirects=True,
@@ -155,9 +164,9 @@ class TestAutenticacao:
         assert resp.status_code == 200
         assert "Credenciais Inválidas" in resp.text
 
-    def test_login_usuario_inexistente(self):
+    def test_login_usuario_inexistente(self, client_app):
         """Login com usuário que não existe deve retornar erro."""
-        resp = client.post(
+        resp = client_app.post(
             "/login",
             data={"username": "nao_existe", "password": "123456"},
             follow_redirects=True,
@@ -165,14 +174,14 @@ class TestAutenticacao:
         assert resp.status_code == 200
         assert "Credenciais Inválidas" in resp.text
 
-    def test_logout_limpa_sessao(self, session_admin):
+    def test_logout_limpa_sessao(self, client_app, session_admin):
         """Logout deve apagar o cookie e redirecionar para /login."""
-        resp = client.get("/logout", cookies=session_admin)
+        resp = client_app.get("/logout", cookies=session_admin)
         assert resp.status_code == 303
         assert "/login" in resp.headers["location"]
 
         # Após logout, acessar / deve redirecionar para /login
-        resp2 = client.get("/", cookies=session_admin)
+        resp2 = client_app.get("/", cookies=session_admin)
         assert resp2.status_code == 303
 
 
@@ -182,64 +191,64 @@ class TestAutenticacao:
 
 class TestProtecaoRotas:
 
-    def test_dashboard_sem_auth(self):
+    def test_dashboard_sem_auth(self, client_app):
         """/ sem sessão deve redirecionar para /login."""
-        resp = client.get("/")
+        resp = client_app.get("/")
         assert resp.status_code == 303
         assert "login" in resp.headers["location"]
 
-    def test_produtos_sem_auth(self):
+    def test_produtos_sem_auth(self, client_app):
         """/produtos sem sessão deve redirecionar."""
-        resp = client.get("/produtos")
+        resp = client_app.get("/produtos")
         assert resp.status_code == 303
 
-    def test_fornecedores_sem_auth(self):
+    def test_fornecedores_sem_auth(self, client_app):
         """/fornecedores sem sessão deve redirecionar."""
-        resp = client.get("/fornecedores")
+        resp = client_app.get("/fornecedores")
         assert resp.status_code == 303
 
-    def test_empresas_sem_auth(self):
+    def test_empresas_sem_auth(self, client_app):
         """/empresas sem sessão deve redirecionar."""
-        resp = client.get("/empresas")
+        resp = client_app.get("/empresas")
         assert resp.status_code == 303
 
-    def test_usuarios_sem_auth(self):
+    def test_usuarios_sem_auth(self, client_app):
         """/usuarios sem sessão deve redirecionar."""
-        resp = client.get("/usuarios")
+        resp = client_app.get("/usuarios")
         assert resp.status_code == 303
 
-    def test_post_fornecedor_novo_sem_auth(self):
+    def test_post_fornecedor_novo_sem_auth(self, client_app):
         """POST /fornecedores/novo sem sessão deve redirecionar (P1)."""
-        resp = client.post(
+        resp = client_app.post(
             "/fornecedores/novo",
             data={"nome": "Tentativa", "cnpj": "", "telefone": "", "email": ""},
         )
         assert resp.status_code == 303
         assert "login" in resp.headers["location"]
 
-    def test_post_fornecedor_editar_sem_auth(self):
+    def test_post_fornecedor_editar_sem_auth(self, client_app):
         """POST /fornecedores/editar/{id} sem sessão deve redirecionar (P1)."""
-        resp = client.post(
+        resp = client_app.post(
             "/fornecedores/editar/999",
             data={"nome": "Tentativa", "cnpj": "", "telefone": "", "email": ""},
         )
         assert resp.status_code == 303
         assert "login" in resp.headers["location"]
 
-    def test_api_produtos_sem_auth(self):
+    def test_api_produtos_sem_auth(self, client_app):
         """GET /api/produtos/{id} sem sessão deve retornar 401 (P1)."""
-        resp = client.get("/api/produtos/1")
+        resp = client_app.get("/api/produtos/1")
         assert resp.status_code == 401
         assert "erro" in resp.json()
 
-    def test_logs_sem_auth(self):
+    def test_logs_sem_auth(self, client_app):
         """/logs sem sessão deve redirecionar."""
-        resp = client.get("/logs")
+        resp = client_app.get("/logs")
         assert resp.status_code == 303
 
-    def test_banco_horas_sem_auth(self):
+    def test_banco_horas_sem_auth(self, client_app):
         """/banco-horas sem sessão deve redirecionar."""
-        resp = client.get("/banco-horas")
+        resp = client_app.get("/banco-horas")
         assert resp.status_code == 303
 
 
@@ -249,9 +258,9 @@ class TestProtecaoRotas:
 
 class TestEmpresas:
 
-    def test_criar_empresa(self, session_admin):
+    def test_criar_empresa(self, client_app, session_admin):
         """POST /empresas/nova deve criar e redirecionar."""
-        resp = client.post(
+        resp = client_app.post(
             "/empresas/nova",
             data={
                 "cnpj": "22.222.222/0001-22",
@@ -271,15 +280,15 @@ class TestEmpresas:
         assert row is not None
         assert row.razao_social == "Razão Social Teste"
 
-    def test_listar_empresas(self, session_admin, empresa_id):
+    def test_listar_empresas(self, client_app, session_admin, empresa_id):
         """GET /empresas deve retornar 200 com a empresa criada."""
-        resp = client.get("/empresas", cookies=session_admin)
+        resp = client_app.get("/empresas", cookies=session_admin)
         assert resp.status_code == 200
         assert "Empresa Teste" in resp.text
 
-    def test_deletar_empresa(self, session_admin, empresa_id):
+    def test_deletar_empresa(self, client_app, session_admin, empresa_id):
         """GET /empresas/deletar/{id} deve remover do banco."""
-        resp = client.get(f"/empresas/deletar/{empresa_id}", cookies=session_admin)
+        resp = client_app.get(f"/empresas/deletar/{empresa_id}", cookies=session_admin)
         assert resp.status_code == 303
 
         with engine.connect() as conn:
@@ -295,9 +304,9 @@ class TestEmpresas:
 
 class TestFornecedores:
 
-    def test_criar_fornecedor(self, session_admin):
+    def test_criar_fornecedor(self, client_app, session_admin):
         """POST /fornecedores/novo deve criar e redirecionar."""
-        resp = client.post(
+        resp = client_app.post(
             "/fornecedores/novo",
             data={
                 "nome": "Fornecedor Novo",
@@ -316,9 +325,9 @@ class TestFornecedores:
         assert row is not None
         assert row.email == "novo@fornecedor.com"
 
-    def test_editar_fornecedor(self, session_admin, fornecedor_id):
+    def test_editar_fornecedor(self, client_app, session_admin, fornecedor_id):
         """POST /fornecedores/editar/{id} deve atualizar os dados."""
-        resp = client.post(
+        resp = client_app.post(
             f"/fornecedores/editar/{fornecedor_id}",
             data={
                 "nome": "Fornecedor Atualizado",
@@ -337,21 +346,21 @@ class TestFornecedores:
             ).fetchone()
         assert row.nome == "Fornecedor Atualizado"
 
-    def test_listar_fornecedores(self, session_admin, fornecedor_id):
+    def test_listar_fornecedores(self, client_app, session_admin, fornecedor_id):
         """GET /fornecedores deve retornar 200 com o fornecedor criado."""
-        resp = client.get("/fornecedores", cookies=session_admin)
+        resp = client_app.get("/fornecedores", cookies=session_admin)
         assert resp.status_code == 200
         assert "Fornecedor Teste" in resp.text
 
-    def test_busca_fornecedor(self, session_admin, fornecedor_id):
+    def test_busca_fornecedor(self, client_app, session_admin, fornecedor_id):
         """GET /fornecedores?busca= deve filtrar por nome."""
-        resp = client.get("/fornecedores?busca=Fornecedor Teste", cookies=session_admin)
+        resp = client_app.get("/fornecedores?busca=Fornecedor Teste", cookies=session_admin)
         assert resp.status_code == 200
         assert "Fornecedor Teste" in resp.text
 
-    def test_deletar_fornecedor(self, session_admin, fornecedor_id):
+    def test_deletar_fornecedor(self, client_app, session_admin, fornecedor_id):
         """GET /fornecedores/deletar/{id} deve remover do banco."""
-        resp = client.get(
+        resp = client_app.get(
             f"/fornecedores/deletar/{fornecedor_id}", cookies=session_admin
         )
         assert resp.status_code == 303
@@ -370,9 +379,9 @@ class TestFornecedores:
 
 class TestProdutos:
 
-    def test_criar_produto(self, session_admin, empresa_id, fornecedor_id):
+    def test_criar_produto(self, client_app, session_admin, empresa_id, fornecedor_id):
         """POST /produtos/novo deve inserir produto no banco."""
-        resp = client.post(
+        resp = client_app.post(
             "/produtos/novo",
             data={
                 "nome": "Calça Jeans",
@@ -395,27 +404,27 @@ class TestProdutos:
         assert float(row.quantidade) == 20.0
         assert float(row.preco) == 89.90
 
-    def test_listar_produtos(self, session_admin, produto_id):
+    def test_listar_produtos(self, client_app, session_admin, produto_id):
         """GET /produtos deve retornar 200 com o produto criado."""
-        resp = client.get("/produtos", cookies=session_admin)
+        resp = client_app.get("/produtos", cookies=session_admin)
         assert resp.status_code == 200
         assert "Camiseta Teste" in resp.text
 
-    def test_busca_produto_por_nome(self, session_admin, produto_id):
+    def test_busca_produto_por_nome(self, client_app, session_admin, produto_id):
         """GET /produtos?busca= deve filtrar por nome."""
-        resp = client.get("/produtos?busca=Camiseta", cookies=session_admin)
+        resp = client_app.get("/produtos?busca=Camiseta", cookies=session_admin)
         assert resp.status_code == 200
         assert "Camiseta Teste" in resp.text
 
-    def test_busca_produto_por_cor(self, session_admin, produto_id):
+    def test_busca_produto_por_cor(self, client_app, session_admin, produto_id):
         """GET /produtos?busca= deve filtrar por cor."""
-        resp = client.get("/produtos?busca=Azul", cookies=session_admin)
+        resp = client_app.get("/produtos?busca=Azul", cookies=session_admin)
         assert resp.status_code == 200
         assert "Camiseta Teste" in resp.text
 
-    def test_editar_produto(self, session_admin, produto_id, empresa_id, fornecedor_id):
+    def test_editar_produto(self, client_app, session_admin, produto_id, empresa_id, fornecedor_id):
         """POST /produtos/editar/{id} deve atualizar os dados no banco."""
-        resp = client.post(
+        resp = client_app.post(
             f"/produtos/editar/{produto_id}",
             data={
                 "nome": "Camiseta Editada",
@@ -437,9 +446,9 @@ class TestProdutos:
         assert row.nome == "Camiseta Editada"
         assert float(row.quantidade) == 15.0
 
-    def test_deletar_produto_sem_vendas(self, session_admin, produto_id):
+    def test_deletar_produto_sem_vendas(self, client_app, session_admin, produto_id):
         """Produto sem vendas deve ser excluído normalmente."""
-        resp = client.get(f"/produtos/deletar/{produto_id}", cookies=session_admin)
+        resp = client_app.get(f"/produtos/deletar/{produto_id}", cookies=session_admin)
         assert resp.status_code == 303
         assert "msg=produto_excluido" in resp.headers["location"]
 
@@ -450,7 +459,7 @@ class TestProdutos:
         assert row is None
 
     def test_deletar_produto_com_vendas_bloqueado(
-        self, session_admin, produto_id, empresa_id
+        self, client_app, session_admin, produto_id, empresa_id
     ):
         """Produto com vendas associadas NÃO deve ser excluído (P2)."""
         # Registra uma venda para o produto
@@ -466,7 +475,7 @@ class TestProdutos:
             """), {"produto_id": produto_id, "empresa_id": empresa_id})
             conn.commit()
 
-        resp = client.get(f"/produtos/deletar/{produto_id}", cookies=session_admin)
+        resp = client_app.get(f"/produtos/deletar/{produto_id}", cookies=session_admin)
         assert resp.status_code == 303
         assert "produto_com_vendas" in resp.headers["location"]
 
@@ -477,9 +486,9 @@ class TestProdutos:
             ).fetchone()
         assert row is not None
 
-    def test_deletar_produto_sem_auth(self, produto_id):
+    def test_deletar_produto_sem_auth(self, client_app, produto_id):
         """Deletar produto sem sessão deve redirecionar para login."""
-        resp = client.get(f"/produtos/deletar/{produto_id}")
+        resp = client_app.get(f"/produtos/deletar/{produto_id}")
         assert resp.status_code == 303
         assert "login" in resp.headers["location"]
 
@@ -491,10 +500,10 @@ class TestProdutos:
 class TestVendas:
 
     def test_registrar_venda_e_baixar_estoque(
-        self, session_admin, produto_id, empresa_id
+        self, client_app, session_admin, produto_id, empresa_id
     ):
         """POST /vendas/nova deve registrar venda e descontar estoque."""
-        resp = client.post(
+        resp = client_app.post(
             "/vendas/nova",
             data={
                 "tipo_documento": "comprovante",
@@ -519,9 +528,9 @@ class TestVendas:
             ).fetchone()
         assert float(row.quantidade) == 7.0
 
-    def test_venda_sem_auth(self, produto_id, empresa_id):
+    def test_venda_sem_auth(self, client_app, produto_id, empresa_id):
         """POST /vendas/nova sem sessão deve redirecionar para login."""
-        resp = client.post(
+        resp = client_app.post(
             "/vendas/nova",
             data={
                 "tipo_documento": "comprovante",
@@ -534,9 +543,9 @@ class TestVendas:
         assert resp.status_code == 303
         assert "login" in resp.headers["location"]
 
-    def test_listar_vendas(self, session_admin):
+    def test_listar_vendas(self, client_app, session_admin):
         """GET /vendas deve retornar 200."""
-        resp = client.get("/vendas", cookies=session_admin)
+        resp = client_app.get("/vendas", cookies=session_admin)
         assert resp.status_code == 200
 
 
@@ -546,16 +555,16 @@ class TestVendas:
 
 class TestAPI:
 
-    def test_api_produtos_sem_auth_retorna_401(self):
+    def test_api_produtos_sem_auth_retorna_401(self, client_app):
         """GET /api/produtos/{id} sem sessão deve retornar 401 (P1)."""
-        resp = client.get("/api/produtos/1")
+        resp = client_app.get("/api/produtos/1")
         assert resp.status_code == 401
         data = resp.json()
         assert "erro" in data
 
-    def test_api_produtos_com_auth(self, session_admin, produto_id, empresa_id):
+    def test_api_produtos_com_auth(self, client_app, session_admin, produto_id, empresa_id):
         """GET /api/produtos/{empresa_id} autenticado deve retornar JSON com estoque."""
-        resp = client.get(
+        resp = client_app.get(
             f"/api/produtos/{empresa_id}", cookies=session_admin
         )
         assert resp.status_code == 200
@@ -566,9 +575,9 @@ class TestAPI:
         nomes = [p["nome"] for p in data["estoque"]]
         assert "Camiseta Teste" in nomes
 
-    def test_api_empresa_inexistente(self, session_admin):
+    def test_api_empresa_inexistente(self, client_app, session_admin):
         """API com empresa_id que não existe deve retornar lista vazia."""
-        resp = client.get("/api/produtos/99999", cookies=session_admin)
+        resp = client_app.get("/api/produtos/99999", cookies=session_admin)
         assert resp.status_code == 200
         data = resp.json()
         assert data["estoque"] == []
@@ -580,17 +589,17 @@ class TestAPI:
 
 class TestRestricaoPerfil:
 
-    def test_logs_acessivel_apenas_para_admin(self, session_admin):
+    def test_logs_acessivel_apenas_para_admin(self, client_app, session_admin):
         """Admin deve conseguir acessar /logs."""
-        resp = client.get("/logs", cookies=session_admin)
+        resp = client_app.get("/logs", cookies=session_admin)
         assert resp.status_code == 200
 
-    def test_banco_horas_acessivel_apenas_para_admin(self, session_admin):
+    def test_banco_horas_acessivel_apenas_para_admin(self, client_app, session_admin):
         """Admin deve conseguir acessar /banco-horas."""
-        resp = client.get("/banco-horas", cookies=session_admin)
+        resp = client_app.get("/banco-horas", cookies=session_admin)
         assert resp.status_code == 200
 
-    def test_usuario_comum_nao_acessa_logs(self, session_admin):
+    def test_usuario_comum_nao_acessa_logs(self, client_app, session_admin):
         """Usuário com perfil 'user' não deve acessar /logs."""
         # Cria usuário comum
         with engine.connect() as conn:
@@ -601,7 +610,7 @@ class TestRestricaoPerfil:
             conn.commit()
 
         # Faz login como usuário comum
-        resp_login = client.post(
+        resp_login = client_app.post(
             "/login",
             data={"username": "user_comum", "password": "senha123"},
         )
@@ -609,10 +618,10 @@ class TestRestricaoPerfil:
         cookie_comum = {"session_id": resp_login.cookies.get("session_id")}
 
         # Tenta acessar /logs
-        resp = client.get("/logs", cookies=cookie_comum)
+        resp = client_app.get("/logs", cookies=cookie_comum)
         assert resp.status_code == 303  # Redireciona para /
 
-    def test_usuario_comum_nao_acessa_banco_horas(self, session_admin):
+    def test_usuario_comum_nao_acessa_banco_horas(self, client_app, session_admin):
         """Usuário com perfil 'user' não deve acessar /banco-horas."""
         with engine.connect() as conn:
             conn.execute(text("""
@@ -621,13 +630,13 @@ class TestRestricaoPerfil:
             """), {"senha": hash_password("senha123")})
             conn.commit()
 
-        resp_login = client.post(
+        resp_login = client_app.post(
             "/login",
             data={"username": "user_comum2", "password": "senha123"},
         )
         cookie_comum = {"session_id": resp_login.cookies.get("session_id")}
 
-        resp = client.get("/banco-horas", cookies=cookie_comum)
+        resp = client_app.get("/banco-horas", cookies=cookie_comum)
         assert resp.status_code == 303
 
 
@@ -637,15 +646,15 @@ class TestRestricaoPerfil:
 
 class TestDashboard:
 
-    def test_dashboard_admin(self, session_admin):
+    def test_dashboard_admin(self, client_app, session_admin):
         """Dashboard deve retornar 200 para admin."""
-        resp = client.get("/", cookies=session_admin)
+        resp = client_app.get("/", cookies=session_admin)
         assert resp.status_code == 200
         assert "Resumo do Sistema" in resp.text
 
-    def test_dashboard_contem_cards(self, session_admin):
+    def test_dashboard_contem_cards(self, client_app, session_admin):
         """Dashboard deve exibir os cards de resumo."""
-        resp = client.get("/", cookies=session_admin)
+        resp = client_app.get("/", cookies=session_admin)
         assert "Produtos Cadastrados" in resp.text
         assert "Vendas do Mês" in resp.text
         assert "Faturamento do Mês" in resp.text
