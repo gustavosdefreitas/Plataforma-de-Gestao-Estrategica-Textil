@@ -94,12 +94,13 @@
                             <a href="/produtos/editar/{{ p.id }}" class="btn btn-sm btn-outline-primary" title="Editar">
                                 <i class="fas fa-edit"></i>
                             </a>
-                            <a href="/produtos/deletar/{{ p.id }}"
-                               class="btn btn-outline-danger btn-sm"
-                               title="Excluir"
-                               onclick="return confirm('Excluir o produto &quot;{{ p.nome }}&quot;? Esta ação não pode ser desfeita.')">
+                            <button type="button"
+                                class="btn btn-outline-danger btn-sm"
+                                title="Excluir"
+                                onclick="confirmarExclusao('/produtos/deletar/{{ p.id }}', '{{ p.nome }}')"
+                            >
                                 <i class="fas fa-trash"></i>
-                            </a>
+                            </button>
                         </td>
                     </tr>
                     {% else %}
@@ -206,4 +207,33 @@
   </div>
 </div>
 
+
+{# Modal de confirmação de exclusão (reutilizável) #}
+<div class="modal fade" id="modalConfirmarExclusao" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>Confirmar Exclusão</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1">Tem certeza que deseja excluir o produto:</p>
+        <p class="fw-bold text-danger" id="modalExclusaoNomeProduto"></p>
+        <p class="text-muted small mb-0">Se o produto tiver vendas associadas, a exclusão será bloqueada automaticamente.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <a id="modalExclusaoBtnConfirmar" href="#" class="btn btn-danger"><i class="fas fa-trash me-1"></i>Excluir</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function confirmarExclusao(url, nome) {
+    document.getElementById('modalExclusaoNomeProduto').textContent = nome;
+    document.getElementById('modalExclusaoBtnConfirmar').href = url;
+    new bootstrap.Modal(document.getElementById('modalConfirmarExclusao')).show();
+}
+</script>
 {% endblock %}

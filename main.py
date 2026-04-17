@@ -223,7 +223,13 @@ async def dashboard(request: Request):
         return RedirectResponse(url="/login", status_code=303)
 
     with engine.connect() as conn:
+        # Contagem de itens distintos (SKUs) cadastrados
         total_produtos = conn.execute(
+            text("SELECT COUNT(*) FROM produtos")
+        ).fetchone()[0]
+
+        # Soma total de unidades em estoque
+        total_unidades = conn.execute(
             text("SELECT COALESCE(SUM(quantidade), 0) FROM produtos")
         ).fetchone()[0]
 
@@ -278,7 +284,8 @@ async def dashboard(request: Request):
 
     return templates.TemplateResponse(request, "dashboard.html", {
         "user": user,
-        "total_produtos": float(total_produtos or 0),
+        "total_produtos": int(total_produtos or 0),
+        "total_unidades": float(total_unidades or 0),
         "total_vendas": total_vendas,
         "total_vendas_valor": float(total_vendas_valor or 0),
         "total_empresas": total_empresas,
@@ -394,7 +401,7 @@ async def novo_produto(
 
     registrar_log(user.id, user.username, "CADASTRO_PRODUTO", f"Produto: {nome}, cor: {cor}, tamanho: {tamanho}")
 
-    return RedirectResponse(url="/produtos", status_code=303)
+    return RedirectResponse(url="/produtos?msg=produto_criado", status_code=303)
 
 @app.get("/produtos/novo")
 async def exibir_formulario_cadastro(request: Request):
@@ -473,7 +480,7 @@ async def editar_produto(
         })
         conn.commit()
 
-    return RedirectResponse(url="/produtos", status_code=303)
+    return RedirectResponse(url="/produtos?msg=produto_atualizado", status_code=303)
 
 @app.get("/produtos/deletar/{id}")
 async def deletar_produto(request: Request, id: int):
@@ -499,7 +506,7 @@ async def deletar_produto(request: Request, id: int):
         conn.commit()
 
     registrar_log(user.id, user.username, "EXCLUSAO_PRODUTO", f"Produto ID: {id} excluído")
-    return RedirectResponse(url="/produtos", status_code=303)
+    return RedirectResponse(url="/produtos?msg=produto_excluido", status_code=303)
 
 
 # --- GESTÃO DE USUÁRIOS ---
@@ -680,7 +687,7 @@ async def editar_fornecedor(
         })
         conn.commit()
 
-    return RedirectResponse(url="/fornecedores", status_code=303)
+    return RedirectResponse(url="/fornecedores?msg=fornecedor_atualizado", status_code=303)
 
 @app.post("/fornecedores/novo")
 async def novo_fornecedor(
@@ -706,7 +713,7 @@ async def novo_fornecedor(
         })
         conn.commit()
 
-    return RedirectResponse(url="/fornecedores", status_code=303)
+    return RedirectResponse(url="/fornecedores?msg=fornecedor_criado", status_code=303)
 
 @app.get("/fornecedores/deletar/{id}")
 async def deletar_fornecedor(request: Request, id: int):
@@ -721,7 +728,7 @@ async def deletar_fornecedor(request: Request, id: int):
         )
         conn.commit()
 
-    return RedirectResponse(url="/fornecedores", status_code=303)
+    return RedirectResponse(url="/fornecedores?msg=fornecedor_excluido", status_code=303)
 
 
 # --- VENDAS ---

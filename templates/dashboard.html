@@ -5,11 +5,12 @@
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
-        <h2 class="fw-bold mb-1">📊 Resumo do Sistema</h2>
-        <p class="text-muted mb-0">Bem-vindo de volta, {{ user.username }}!</p>
+        <h2 class="fw-bold mb-1"><i class="fas fa-chart-pie me-2 text-primary"></i>Resumo do Sistema</h2>
+        <p class="text-muted mb-0">Bem-vindo de volta, <strong>{{ user.username }}</strong>!</p>
     </div>
 </div>
 
+{# Cards de resumo — visíveis para todos #}
 <div class="row g-4 mb-4">
     <div class="col-md-6 col-xl-3">
         <div class="card border-0 shadow-sm h-100">
@@ -18,8 +19,9 @@
                     <i class="fas fa-boxes fa-2x"></i>
                 </div>
                 <div class="flex-grow-1 ms-3">
-                    <h6 class="text-muted mb-1">Total de Produtos</h6>
+                    <h6 class="text-muted mb-0">Produtos Cadastrados</h6>
                     <h3 class="mb-0 fw-bold">{{ total_produtos }}</h3>
+                    <small class="text-muted">{{ "%.0f"|format(total_unidades) }} unid. em estoque</small>
                 </div>
             </div>
         </div>
@@ -32,8 +34,9 @@
                     <i class="fas fa-cart-shopping fa-2x"></i>
                 </div>
                 <div class="flex-grow-1 ms-3">
-                    <h6 class="text-muted mb-1">Vendas do Mês</h6>
+                    <h6 class="text-muted mb-0">Vendas do Mês</h6>
                     <h3 class="mb-0 fw-bold">{{ total_vendas }}</h3>
+                    <small class="text-muted">transações registradas</small>
                 </div>
             </div>
         </div>
@@ -46,16 +49,14 @@
                     <i class="fas fa-dollar-sign fa-2x"></i>
                 </div>
                 <div class="flex-grow-1 ms-3">
-                    <h6 class="text-muted mb-1">Faturamento do Mês</h6>
-                    <h3 class="mb-0 fw-bold">
-                        R$ {{ "%.2f"|format(total_vendas_valor) }}
-                    </h3>
+                    <h6 class="text-muted mb-0">Faturamento do Mês</h6>
+                    <h3 class="mb-0 fw-bold">R$ {{ "%.2f"|format(total_vendas_valor) }}</h3>
+                    <small class="text-muted">mês atual</small>
                 </div>
             </div>
         </div>
     </div>
 
-    
     <div class="col-md-6 col-xl-3">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body d-flex align-items-center">
@@ -63,14 +64,16 @@
                     <i class="fas fa-truck fa-2x"></i>
                 </div>
                 <div class="flex-grow-1 ms-3">
-                    <h6 class="text-muted mb-1">Fornecedores</h6>
+                    <h6 class="text-muted mb-0">Fornecedores</h6>
                     <h3 class="mb-0 fw-bold">{{ total_fornecedores }}</h3>
+                    <small class="text-muted">{{ total_empresas }} empresa(s) ativa(s)</small>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
+{# Gráfico de estoque por empresa — visível para todos #}
 <div class="row g-4 mb-4">
     <div class="col-lg-8">
         <div class="card shadow-sm border-0 h-100">
@@ -79,7 +82,7 @@
                     <i class="fas fa-chart-bar me-2"></i>Estoque por Empresa
                 </h5>
                 <span class="badge bg-light text-muted border">
-                    Total em estoque: {{ total_produtos }}
+                    {{ "%.0f"|format(total_unidades) }} unidades totais
                 </span>
             </div>
             <div class="card-body">
@@ -91,35 +94,54 @@
     </div>
 
     <div class="col-lg-4">
-        <div class="card shadow-sm border-0 bg-primary text-white h-100">
-            <div class="card-body d-flex flex-column justify-content-center text-center p-4">
-                <div class="mb-3">
-                    <i class="fas fa-chart-line fa-3x"></i>
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body d-flex flex-column justify-content-between p-4">
+                <div>
+                    <h5 class="fw-bold mb-3"><i class="fas fa-bolt me-2 text-warning"></i>Acesso Rápido</h5>
+                    <div class="d-grid gap-2">
+                        <a href="/vendas" class="btn btn-primary text-start">
+                            <i class="fas fa-cart-plus me-2"></i>Nova Venda
+                        </a>
+                        {% if user and user.perfil == 'admin' %}
+                        <a href="/produtos" class="btn btn-outline-primary text-start">
+                            <i class="fas fa-plus me-2"></i>Adicionar Produto
+                        </a>
+                        <a href="/produtos" class="btn btn-outline-secondary text-start">
+                            <i class="fas fa-list me-2"></i>Ver Inventário
+                        </a>
+                        <a href="/fornecedores" class="btn btn-outline-secondary text-start">
+                            <i class="fas fa-truck me-2"></i>Ver Fornecedores
+                        </a>
+                        {% endif %}
+                        <a href="/vendas" class="btn btn-outline-success text-start">
+                            <i class="fas fa-history me-2"></i>Histórico de Vendas
+                        </a>
+                    </div>
                 </div>
-                <h4 class="fw-bold">Análise de Giro</h4>
-                <p class="mb-0 opacity-90">
-                    O gráfico ao lado mostra como o estoque está distribuído entre as empresas cadastradas.
+                <p class="text-muted small mb-0 mt-3">
+                    <i class="fas fa-clock me-1"></i>Sistema atualizado em tempo real.
                 </p>
             </div>
         </div>
     </div>
 </div>
 
-{% if user and user.perfil == 'admin' %}
+{# Vendas recentes — admin vê tudo, usuário comum vê as próprias #}
 <div class="row g-4">
-    <div class="col-lg-8">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white py-3">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h5 class="mb-0 fw-bold">
                     <i class="fas fa-history me-2"></i>Vendas Recentes
                 </h5>
+                <a href="/vendas" class="btn btn-sm btn-outline-primary">Ver todas</a>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>Data</th>
+                                <th class="ps-3">Data</th>
                                 <th>Produto</th>
                                 <th>Cor</th>
                                 <th>Tamanho</th>
@@ -130,16 +152,17 @@
                         <tbody>
                             {% for venda in vendas_recentes %}
                             <tr>
-                                <td>{{ venda.data_venda.strftime('%d/%m/%Y %H:%M') if venda.data_venda else '' }}</td>
+                                <td class="ps-3 text-muted small">{{ venda.data_venda.strftime('%d/%m/%Y %H:%M') if venda.data_venda else '' }}</td>
                                 <td class="fw-semibold">{{ venda.nome }}</td>
-                                <td>{{ venda.cor or '-' }}</td>
-                                <td>{{ venda.tamanho or '-' }}</td>
+                                <td>{{ venda.cor or '—' }}</td>
+                                <td>{{ venda.tamanho or '—' }}</td>
                                 <td>{{ venda.quantidade }}</td>
                                 <td class="text-success fw-bold">R$ {{ "%.2f"|format(venda.total) }}</td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-4">
+                                <td colspan="6" class="text-center text-muted py-5">
+                                    <i class="fas fa-shopping-cart fa-2x mb-2 d-block opacity-25"></i>
                                     Nenhuma venda registrada ainda.
                                 </td>
                             </tr>
@@ -150,30 +173,7 @@
             </div>
         </div>
     </div>
-
-    <div class="col-lg-4">
-        <div class="card border-0 shadow-sm bg-dark text-white h-100">
-            <div class="card-body">
-                <h5 class="fw-bold mb-4">Acesso Rápido</h5>
-                <div class="d-grid gap-2">
-                    <a href="/vendas" class="btn btn-primary text-start">
-                        <i class="fas fa-cart-plus me-2"></i>Nova Venda
-                    </a>
-                    <a href="/produtos" class="btn btn-outline-light text-start">
-                        <i class="fas fa-plus me-2"></i>Adicionar Produto
-                    </a>
-                    <a href="/produtos" class="btn btn-secondary text-start">
-                        <i class="fas fa-list me-2"></i>Ver Inventário
-                    </a>
-                    <a href="/fornecedores" class="btn btn-outline-light text-start">
-                        <i class="fas fa-truck me-2"></i>Ver Fornecedores
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
-{% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
@@ -187,7 +187,7 @@
         data: {
             labels: labels,
             datasets: [{
-                label: 'Quantidade em Estoque',
+                label: 'Unidades em Estoque',
                 data: valores,
                 backgroundColor: [
                     'rgba(13, 110, 253, 0.85)',
@@ -215,13 +215,9 @@
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
-            animation: {
-                duration: 900
-            },
+            animation: { duration: 900 },
             plugins: {
-                legend: {
-                    display: false
-                },
+                legend: { display: false },
                 tooltip: {
                     backgroundColor: '#212529',
                     titleColor: '#fff',
@@ -230,7 +226,7 @@
                     displayColors: false,
                     callbacks: {
                         label: function(context) {
-                            return 'Estoque: ' + context.raw;
+                            return 'Estoque: ' + context.raw + ' unidades';
                         }
                     }
                 }
@@ -238,23 +234,12 @@
             scales: {
                 x: {
                     beginAtZero: true,
-                    grid: {
-                        color: 'rgba(0, 0, 0, 0.06)'
-                    },
-                    ticks: {
-                        precision: 0
-                    }
+                    grid: { color: 'rgba(0, 0, 0, 0.06)' },
+                    ticks: { precision: 0 }
                 },
                 y: {
-                    grid: {
-                        display: false
-                    },
-                    ticks: {
-                        color: '#495057',
-                        font: {
-                            size: 12
-                        }
-                    }
+                    grid: { display: false },
+                    ticks: { color: '#495057', font: { size: 12 } }
                 }
             }
         }
