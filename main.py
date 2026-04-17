@@ -1719,12 +1719,25 @@ async def listar_logs(
 async def banco_horas(
     request: Request,
     usuario: str = Query(None),
-    data_inicio: date = Query(None),
-    data_fim: date = Query(None)):
+    data_inicio_str: str | None = Query(None, alias="data_inicio"),
+    data_fim_str: str | None = Query(None, alias="data_fim")):
 
     user = get_current_user(request)
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
+
+    data_inicio: date | None = None
+    data_fim: date | None = None
+    try:
+        if data_inicio_str and data_inicio_str.strip():
+            data_inicio = date.fromisoformat(data_inicio_str.strip())
+    except ValueError:
+        data_inicio = None
+    try:
+        if data_fim_str and data_fim_str.strip():
+            data_fim = date.fromisoformat(data_fim_str.strip())
+    except ValueError:
+        data_fim = None
 
     filtros = ["acao IN ('LOGIN', 'LOGOUT')"]
     params = {}
@@ -1846,12 +1859,25 @@ async def banco_horas(
 async def banco_horas_pdf(
     request: Request,
     usuario: str = Query(None),
-    data_inicio: date = Query(None),
-    data_fim: date = Query(None)):
+    data_inicio_str: str | None = Query(None, alias="data_inicio"),
+    data_fim_str: str | None = Query(None, alias="data_fim")):
 
     user = get_current_user(request)
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
+
+    data_inicio: date | None = None
+    data_fim: date | None = None
+    try:
+        if data_inicio_str and data_inicio_str.strip():
+            data_inicio = date.fromisoformat(data_inicio_str.strip())
+    except ValueError:
+        data_inicio = None
+    try:
+        if data_fim_str and data_fim_str.strip():
+            data_fim = date.fromisoformat(data_fim_str.strip())
+    except ValueError:
+        data_fim = None
 
     filtros = ["acao IN ('LOGIN', 'LOGOUT')"]
     params = {}
