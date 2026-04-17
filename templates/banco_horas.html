@@ -6,7 +6,7 @@
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-header bg-primary text-white py-3">
         <h5 class="mb-0 fw-bold">
-            <i class="fas fa-clock me-2"></i> Banco de Horas
+            <i class="fas fa-clock me-2"></i>Banco de Horas
         </h5>
     </div>
     <div class="card-body">
@@ -22,17 +22,14 @@
                     {% endfor %}
                 </select>
             </div>
-
             <div class="col-md-3">
                 <label class="form-label">Data inicial</label>
                 <input type="date" name="data_inicio" class="form-control" value="{{ data_inicio or '' }}">
             </div>
-
             <div class="col-md-3">
                 <label class="form-label">Data final</label>
                 <input type="date" name="data_fim" class="form-control" value="{{ data_fim or '' }}">
             </div>
-
             <div class="col-md-2 d-flex align-items-end gap-2">
                 <button type="submit" class="btn btn-primary w-100">
                     <i class="fas fa-search me-1"></i> Filtrar
@@ -42,19 +39,31 @@
     </div>
 </div>
 
-<div class="row mb-4">
+<div class="row mb-4 g-3">
     <div class="col-md-4">
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-sm border-0 h-100">
             <div class="card-body">
-                <h6 class="text-muted mb-2">Total de Horas</h6>
-                <h3 class="fw-bold text-primary">{{ total_horas_formatado }}</h3>
+                <h6 class="text-muted mb-1">Total de Horas</h6>
+                <h3 class="fw-bold text-primary mb-0">{{ total_horas_formatado }}</h3>
+                <small class="text-muted">{{ total_horas }} h decimais</small>
             </div>
         </div>
     </div>
-    <div class="col-md-8 d-flex justify-content-end align-items-center">
+    <div class="col-md-5">
+        <div class="card shadow-sm border-0 h-100 border-start border-warning border-3">
+            <div class="card-body">
+                <h6 class="text-muted mb-1"><i class="fas fa-info-circle text-warning me-1"></i>Sobre sessões sem logout</h6>
+                <p class="small text-muted mb-0">
+                    Sessões encerradas sem clique em "Sair" são estimadas até o fim do dia (máx. 8h).
+                    Sessões do dia atual são contadas até o momento presente.
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 d-flex align-items-center justify-content-end">
         <a href="/banco-horas/pdf?usuario={{ filtro_usuario or '' }}&data_inicio={{ data_inicio or '' }}&data_fim={{ data_fim or '' }}"
-           class="btn btn-danger">
-            <i class="fas fa-file-pdf me-2"></i> Gerar PDF
+           class="btn btn-danger w-100">
+            <i class="fas fa-file-pdf me-2"></i>Gerar PDF
         </a>
     </div>
 </div>
@@ -68,19 +77,24 @@
                         <th class="ps-3">Usuário</th>
                         <th>Data</th>
                         <th>Horas Trabalhadas</th>
+                        <th>Horas (decimal)</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for item in resultados %}
                     <tr>
-                        <td class="ps-3">{{ item.username }}</td>
+                        <td class="ps-3 fw-semibold">{{ item.username }}</td>
                         <td>{{ item.dia }}</td>
-                        <td class="fw-bold text-success">{{ item.horas_trabalhadas }} </td>
+                        <td class="fw-bold text-success">
+                            <i class="fas fa-clock me-1 text-muted"></i>{{ item.horas_formatadas }}
+                        </td>
+                        <td class="text-muted small">{{ item.horas_trabalhadas }} h</td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="3" class="text-center py-4 text-muted">
-                            Nenhum registro encontrado.
+                        <td colspan="4" class="text-center py-5 text-muted">
+                            <i class="fas fa-clock fa-2x mb-2 d-block opacity-25"></i>
+                            Nenhum registro encontrado para os filtros aplicados.
                         </td>
                     </tr>
                     {% endfor %}

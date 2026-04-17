@@ -126,6 +126,27 @@
     </div>
 </div>
 
+{# Gráfico de faturamento por empresa (últimos 6 meses) — visível para admin #}
+{% if user and user.perfil == 'admin' and datasets_vendas %}
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold text-primary">
+                    <i class="fas fa-chart-line me-2"></i>Faturamento por Empresa — Últimos 6 Meses
+                </h5>
+                <a href="/vendas" class="btn btn-sm btn-outline-primary">Ver vendas</a>
+            </div>
+            <div class="card-body">
+                <div style="height: 280px;">
+                    <canvas id="graficoVendasEmpresa"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {# Vendas recentes — admin vê tudo, usuário comum vê as próprias #}
 <div class="row g-4">
     <div class="col-12">
@@ -244,5 +265,63 @@
             }
         }
     });
+
+    // Gráfico de faturamento por empresa (últimos 6 meses)
+    {% if user and user.perfil == 'admin' and datasets_vendas %}
+    const mesesVendas = {{ meses_vendas|tojson }};
+    const datasetsVendas = {{ datasets_vendas|tojson }};
+
+    const ctx2 = document.getElementById('graficoVendasEmpresa');
+    if (ctx2) {
+        new Chart(ctx2.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: mesesVendas,
+                datasets: datasetsVendas.map(ds => ({
+                    ...ds,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    borderWidth: 2,
+                }))
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 900 },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: { boxWidth: 12, font: { size: 12 } }
+                    },
+                    tooltip: {
+                        backgroundColor: '#212529',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': R$ ' +
+                                    parseFloat(context.raw).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { grid: { color: 'rgba(0,0,0,0.05)' } },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(0,0,0,0.05)' },
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toLocaleString('pt-BR');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    {% endif %}
 </script>
 {% endblock %}

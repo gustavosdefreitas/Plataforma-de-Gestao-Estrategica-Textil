@@ -279,8 +279,46 @@ async def dashboard(request: Request):
             LIMIT 5
         """)).fetchall()
 
-   # labels = [d.nome_fantasia for d in dados_grafico]
-   # valores = [float(d.total) for d in dados_grafico]
+        # Vendas por empresa nos últimos 6 meses (para gráfico de linha)
+        vendas_por_empresa = conn.execute(text("""
+            SELECT
+                e.nome_fantasia AS empresa,
+                TO_CHAR(DATE_TRUNC('month', v.data_venda), 'MM/YYYY') AS mes,
+                DATE_TRUNC('month', v.data_venda) AS mes_dt,
+                COALESCE(SUM(v.total), 0) AS total_faturado
+            FROM vendas v
+            JOIN produtos p ON v.produto_id = p.id
+            JOIN empresas e ON p.empresa_id = e.id
+            WHERE v.data_venda >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months'
+            GROUP BY e.nome_fantasia, DATE_TRUNC('month', v.data_venda)
+            ORDER BY mes_dt, e.nome_fantasia
+        """)).fetchall()
+
+        # Monta estrutura para Chart.js: {empresa: {mes: valor}}
+        from collections import defaultdict
+        empresas_vendas: dict = defaultdict(dict)
+        meses_set: list = []
+        for row in vendas_por_empresa:
+            if row.mes not in meses_set:
+                meses_set.append(row.mes)
+            empresas_vendas[row.empresa][row.mes] = float(row.total_faturado)
+
+        datasets_vendas = []
+        cores = [
+            "rgba(13,110,253,0.85)", "rgba(25,135,84,0.85)",
+            "rgba(255,193,7,0.85)", "rgba(111,66,193,0.85)",
+            "rgba(220,53,69,0.85)", "rgba(13,202,240,0.85)",
+        ]
+        for i, (empresa, dados_mes) in enumerate(empresas_vendas.items()):
+            cor = cores[i % len(cores)]
+            datasets_vendas.append({
+                "label": empresa,
+                "data": [dados_mes.get(m, 0) for m in meses_set],
+                "borderColor": cor,
+                "backgroundColor": cor,
+                "tension": 0.4,
+                "fill": False,
+            })
 
     return templates.TemplateResponse(request, "dashboard.html", {
         "user": user,
@@ -292,7 +330,9 @@ async def dashboard(request: Request):
         "total_fornecedores": total_fornecedores,
         "labels": labels,
         "valores": valores,
-        "vendas_recentes": vendas_recentes
+        "vendas_recentes": vendas_recentes,
+        "meses_vendas": meses_set,
+        "datasets_vendas": datasets_vendas,
     })
 
 
@@ -1504,6 +1544,9 @@ async def banco_horas(
 
     where_clause = "WHERE " + " AND ".join(filtros)
 
+    # Limite máximo de 8h para sessões sem LOGOUT (evita inflação)
+    LIMITE_HORAS = 8
+
     query = f"""
         WITH eventos AS (
             SELECT
@@ -1521,18 +1564,46 @@ async def banco_horas(
                 ) AS proxima_acao
             FROM logs_sistema
             {where_clause}
+        ),
+        pares AS (
+            SELECT
+                username,
+                dia,
+                acao,
+                data_evento,
+                proxima_acao,
+                proximo_evento,
+                CASE
+                    -- Par limpo: LOGIN seguido de LOGOUT
+                    WHEN acao = 'LOGIN' AND proxima_acao = 'LOGOUT'
+                        THEN LEAST(
+                            EXTRACT(EPOCH FROM (proximo_evento - data_evento)) / 3600,
+                            {LIMITE_HORAS}
+                        )
+                    -- LOGIN sem LOGOUT: usa horário atual se for hoje,
+                    -- ou fim do dia (23:59) caso contrário — máx. 8h
+                    WHEN acao = 'LOGIN' AND proxima_acao IS NULL
+                        THEN LEAST(
+                            EXTRACT(EPOCH FROM (
+                                CASE
+                                    WHEN dia = CURRENT_DATE
+                                        THEN CURRENT_TIMESTAMP
+                                    ELSE (dia::timestamp + INTERVAL '23 hours 59 minutes')
+                                END
+                                - data_evento
+                            )) / 3600,
+                            {LIMITE_HORAS}
+                        )
+                    ELSE 0
+                END AS horas_sessao
+            FROM eventos
+            WHERE acao = 'LOGIN'
         )
         SELECT
             username,
             dia,
-            ROUND(SUM(
-                CASE
-                    WHEN acao = 'LOGIN' AND proxima_acao = 'LOGOUT'
-                    THEN EXTRACT(EPOCH FROM (proximo_evento - data_evento)) / 3600
-                    ELSE 0
-                END
-            )::numeric, 2) AS horas_trabalhadas
-        FROM eventos
+            ROUND(SUM(horas_sessao)::numeric, 2) AS horas_trabalhadas
+        FROM pares
         GROUP BY username, dia
         ORDER BY dia DESC, username
     """
@@ -1600,6 +1671,9 @@ async def banco_horas_pdf(
 
     where_clause = "WHERE " + " AND ".join(filtros)
 
+    # Limite máximo de 8h para sessões sem LOGOUT (evita inflação)
+    LIMITE_HORAS = 8
+
     query = f"""
         WITH eventos AS (
             SELECT
@@ -1617,18 +1691,46 @@ async def banco_horas_pdf(
                 ) AS proxima_acao
             FROM logs_sistema
             {where_clause}
+        ),
+        pares AS (
+            SELECT
+                username,
+                dia,
+                acao,
+                data_evento,
+                proxima_acao,
+                proximo_evento,
+                CASE
+                    -- Par limpo: LOGIN seguido de LOGOUT
+                    WHEN acao = 'LOGIN' AND proxima_acao = 'LOGOUT'
+                        THEN LEAST(
+                            EXTRACT(EPOCH FROM (proximo_evento - data_evento)) / 3600,
+                            {LIMITE_HORAS}
+                        )
+                    -- LOGIN sem LOGOUT: usa horário atual se for hoje,
+                    -- ou fim do dia (23:59) caso contrário — máx. 8h
+                    WHEN acao = 'LOGIN' AND proxima_acao IS NULL
+                        THEN LEAST(
+                            EXTRACT(EPOCH FROM (
+                                CASE
+                                    WHEN dia = CURRENT_DATE
+                                        THEN CURRENT_TIMESTAMP
+                                    ELSE (dia::timestamp + INTERVAL '23 hours 59 minutes')
+                                END
+                                - data_evento
+                            )) / 3600,
+                            {LIMITE_HORAS}
+                        )
+                    ELSE 0
+                END AS horas_sessao
+            FROM eventos
+            WHERE acao = 'LOGIN'
         )
         SELECT
             username,
             dia,
-            ROUND(SUM(
-                CASE
-                    WHEN acao = 'LOGIN' AND proxima_acao = 'LOGOUT'
-                    THEN EXTRACT(EPOCH FROM (proximo_evento - data_evento)) / 3600
-                    ELSE 0
-                END
-            )::numeric, 2) AS horas_trabalhadas
-        FROM eventos
+            ROUND(SUM(horas_sessao)::numeric, 2) AS horas_trabalhadas
+        FROM pares
         GROUP BY username, dia
         ORDER BY dia DESC, username
     """
