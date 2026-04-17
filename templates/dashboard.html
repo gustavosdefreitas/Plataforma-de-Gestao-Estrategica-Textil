@@ -126,6 +126,141 @@
     </div>
 </div>
 
+{# Card de estoque baixo — visível para todos #}
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card border-warning shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold text-warning">
+                    <i class="fas fa-triangle-exclamation me-2" aria-hidden="true"></i>Alerta de Estoque Baixo
+                </h5>
+                <span class="badge bg-warning text-dark">{{ total_estoque_baixo }} produto(s)</span>
+            </div>
+            <div class="card-body p-0">
+                {% if total_estoque_baixo == 0 %}
+                <p class="text-muted text-center py-4 mb-0">Nenhum produto com estoque crítico.</p>
+                {% else %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <caption class="visually-hidden">Produtos com estoque igual ou inferior a 5 unidades</caption>
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col" class="ps-3">Produto</th>
+                                <th scope="col">Cor</th>
+                                <th scope="col">Tamanho</th>
+                                <th scope="col">Empresa</th>
+                                <th scope="col">Qtd. em Estoque</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in estoque_baixo %}
+                            <tr>
+                                <td class="ps-3 fw-semibold">{{ item.nome }}</td>
+                                <td>{{ item.cor or '—' }}</td>
+                                <td>{{ item.tamanho or '—' }}</td>
+                                <td>{{ item.nome_fantasia }}</td>
+                                <td>
+                                    <span class="badge bg-danger">{{ "%.0f"|format(item.quantidade) }}</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Top 10 produtos mais vendidos — visível para todos #}
+{% if top_produtos_labels %}
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold text-primary">
+                    <i class="fas fa-trophy me-2" aria-hidden="true"></i>Top 10 Produtos Mais Vendidos — Últimos 6 Meses
+                </h5>
+            </div>
+            <div class="card-body">
+                <div style="height: 380px;">
+                    <canvas id="chartTopProdutos" role="img" aria-label="Gráfico dos 10 produtos mais vendidos"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# Ticket médio por empresa e botão CSV — somente admin #}
+{% if user and user.perfil == 'admin' %}
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold text-primary">
+                    <i class="fas fa-receipt me-2" aria-hidden="true"></i>Ticket Médio por Empresa — Mês Atual
+                </h5>
+                <a href="/relatorio/csv" class="btn btn-outline-success btn-sm">
+                    <i class="bi bi-download" aria-hidden="true"></i>
+                    <i class="fas fa-file-csv me-1" aria-hidden="true"></i>Exportar CSV
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if ticket_medio_empresas %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <caption class="visually-hidden">Ticket médio, faturamento e vendas do mês por empresa</caption>
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col" class="ps-3">Empresa</th>
+                                <th scope="col">Vendas no Mês</th>
+                                <th scope="col">Faturamento</th>
+                                <th scope="col">Ticket Médio</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in ticket_medio_empresas %}
+                            <tr>
+                                <td class="ps-3 fw-semibold">{{ t.nome_fantasia }}</td>
+                                <td>{{ t.total_vendas }}</td>
+                                <td class="text-success fw-bold">R$ {{ "%.2f"|format(t.faturamento) }}</td>
+                                <td class="fw-bold">R$ {{ "%.2f"|format(t.ticket_medio) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-4 mb-0">Nenhuma venda registrada no mês atual.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Evolução de cadastros — somente admin #}
+{% if evolucao_cadastros and evolucao_cadastros.meses %}
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold text-primary">
+                    <i class="fas fa-chart-line me-2" aria-hidden="true"></i>Evolução de Cadastros — Últimos 6 Meses
+                </h5>
+            </div>
+            <div class="card-body">
+                <div style="height: 300px;">
+                    <canvas id="chartCadastros" role="img" aria-label="Gráfico de evolução de cadastros por mês"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
 {# Gráfico de faturamento por empresa (últimos 6 meses) — visível para admin #}
 {% if user and user.perfil == 'admin' and datasets_vendas %}
 <div class="row g-4 mb-4">
@@ -319,6 +454,100 @@
                             }
                         }
                     }
+                }
+            }
+        });
+    }
+    {% endif %}
+
+    // Gráfico: Top 10 produtos mais vendidos
+    {% if top_produtos_labels %}
+    const topProdutosLabels = {{ top_produtos_labels|tojson }};
+    const topProdutosValores = {{ top_produtos_valores|tojson }};
+    const ctxTop = document.getElementById('chartTopProdutos');
+    if (ctxTop) {
+        const azulShades = [
+            'rgba(13,110,253,0.95)', 'rgba(13,110,253,0.88)',
+            'rgba(13,110,253,0.81)', 'rgba(13,110,253,0.74)',
+            'rgba(13,110,253,0.67)', 'rgba(13,110,253,0.60)',
+            'rgba(13,110,253,0.53)', 'rgba(13,110,253,0.46)',
+            'rgba(13,110,253,0.39)', 'rgba(13,110,253,0.32)',
+        ];
+        new Chart(ctxTop.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: topProdutosLabels,
+                datasets: [{
+                    label: 'Unidades vendidas',
+                    data: topProdutosValores,
+                    backgroundColor: azulShades.slice(0, topProdutosValores.length),
+                    borderColor: 'rgba(13,110,253,1)',
+                    borderWidth: 1,
+                    borderRadius: 6,
+                    maxBarThickness: 24,
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => 'Vendidos: ' + ctx.raw + ' un.'
+                        }
+                    }
+                },
+                scales: {
+                    x: { beginAtZero: true, ticks: { precision: 0 } },
+                    y: { grid: { display: false } }
+                }
+            }
+        });
+    }
+    {% endif %}
+
+    // Gráfico: Evolução de cadastros (admin)
+    {% if user and user.perfil == 'admin' and evolucao_cadastros and evolucao_cadastros.meses %}
+    const cadastrosMeses = {{ evolucao_cadastros.meses|tojson }};
+    const cadastrosProdutos = {{ evolucao_cadastros.produtos_por_mes|tojson }};
+    const cadastrosFornecedores = {{ evolucao_cadastros.fornecedores_por_mes|tojson }};
+    const ctxCad = document.getElementById('chartCadastros');
+    if (ctxCad) {
+        new Chart(ctxCad.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: cadastrosMeses,
+                datasets: [
+                    {
+                        label: 'Produtos',
+                        data: cadastrosProdutos,
+                        borderColor: 'rgba(13,110,253,1)',
+                        backgroundColor: 'rgba(13,110,253,0.2)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 5,
+                    },
+                    {
+                        label: 'Fornecedores',
+                        data: cadastrosFornecedores,
+                        borderColor: 'rgba(25,135,84,1)',
+                        backgroundColor: 'rgba(25,135,84,0.2)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 5,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 } }
                 }
             }
         });

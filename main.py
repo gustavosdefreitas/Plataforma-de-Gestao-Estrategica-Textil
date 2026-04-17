@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Form, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from io import BytesIO
+from io import BytesIO, StringIO
+import csv
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from fastapi.staticfiles import StaticFiles
@@ -140,6 +141,16 @@ async def lifespan(app: FastAPI):
         conn.execute(text("""
             ALTER TABLE vendas
             ADD COLUMN IF NOT EXISTS grupo_venda VARCHAR(36)
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE produtos
+            ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE fornecedores
+            ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         """))
 
         conn.execute(text("CREATE SEQUENCE IF NOT EXISTS seq_numero_venda START 1"))
@@ -326,6 +337,122 @@ async def dashboard(request: Request):
                 "fill": False,
             })
 
+        # Top 10 produtos mais vendidos (últimos 6 meses)
+        try:
+            top_produtos_rows = conn.execute(text("""
+                SELECT p.nome, p.cor, p.tamanho, SUM(v.quantidade) AS total_vendido
+                FROM vendas v
+                JOIN produtos p ON v.produto_id = p.id
+                WHERE v.data_venda >= date_trunc('month', CURRENT_DATE) - INTERVAL '5 months'
+                GROUP BY p.nome, p.cor, p.tamanho
+                ORDER BY total_vendido DESC
+                LIMIT 10
+            """)).fetchall()
+            top_produtos_labels = [
+                f"{r.nome} {r.cor or ''} {r.tamanho or ''}".strip()
+                for r in top_produtos_rows
+            ]
+            top_produtos_valores = [float(r.total_vendido or 0) for r in top_produtos_rows]
+        except Exception:
+            top_produtos_labels = []
+            top_produtos_valores = []
+
+        # Produtos com estoque baixo (<= 5)
+        try:
+            estoque_baixo_rows = conn.execute(text("""
+                SELECT p.nome, p.cor, p.tamanho, p.quantidade, e.nome_fantasia
+                FROM produtos p
+                JOIN empresas e ON p.empresa_id = e.id
+                WHERE p.quantidade <= 5
+                ORDER BY p.quantidade ASC
+                LIMIT 20
+            """)).fetchall()
+            estoque_baixo = [
+                {
+                    "nome": r.nome,
+                    "cor": r.cor,
+                    "tamanho": r.tamanho,
+                    "quantidade": float(r.quantidade or 0),
+                    "nome_fantasia": r.nome_fantasia,
+                }
+                for r in estoque_baixo_rows
+            ]
+            total_estoque_baixo = len(estoque_baixo)
+        except Exception:
+            estoque_baixo = []
+            total_estoque_baixo = 0
+
+        # Ticket médio por empresa (mês atual)
+        try:
+            ticket_rows = conn.execute(text("""
+                SELECT e.nome_fantasia,
+                       COUNT(DISTINCT v.grupo_venda) AS total_vendas,
+                       SUM(v.total) AS faturamento,
+                       ROUND(SUM(v.total) / NULLIF(COUNT(DISTINCT v.grupo_venda), 0), 2) AS ticket_medio
+                FROM vendas v
+                JOIN produtos p ON v.produto_id = p.id
+                JOIN empresas e ON p.empresa_id = e.id
+                WHERE v.data_venda >= date_trunc('month', CURRENT_DATE)
+                  AND v.data_venda < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+                GROUP BY e.nome_fantasia
+                ORDER BY ticket_medio DESC NULLS LAST
+            """)).fetchall()
+            ticket_medio_empresas = [
+                {
+                    "nome_fantasia": r.nome_fantasia,
+                    "total_vendas": int(r.total_vendas or 0),
+                    "faturamento": float(r.faturamento or 0),
+                    "ticket_medio": float(r.ticket_medio or 0),
+                }
+                for r in ticket_rows
+            ]
+        except Exception:
+            ticket_medio_empresas = []
+
+        # Evolução de cadastros (produtos e fornecedores) nos últimos 6 meses
+        try:
+            produtos_mes_rows = conn.execute(text("""
+                SELECT TO_CHAR(DATE_TRUNC('month', criado_em), 'MM/YYYY') AS mes,
+                       DATE_TRUNC('month', criado_em) AS mes_dt,
+                       COUNT(*) AS total
+                FROM produtos
+                WHERE criado_em >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months'
+                GROUP BY mes, mes_dt
+                ORDER BY mes_dt
+            """)).fetchall()
+            fornecedores_mes_rows = conn.execute(text("""
+                SELECT TO_CHAR(DATE_TRUNC('month', criado_em), 'MM/YYYY') AS mes,
+                       DATE_TRUNC('month', criado_em) AS mes_dt,
+                       COUNT(*) AS total
+                FROM fornecedores
+                WHERE criado_em >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months'
+                GROUP BY mes, mes_dt
+                ORDER BY mes_dt
+            """)).fetchall()
+
+            meses_cad: list = []
+            for r in produtos_mes_rows:
+                if r.mes not in meses_cad:
+                    meses_cad.append(r.mes)
+            for r in fornecedores_mes_rows:
+                if r.mes not in meses_cad:
+                    meses_cad.append(r.mes)
+
+            produtos_map = {r.mes: int(r.total or 0) for r in produtos_mes_rows}
+            fornecedores_map = {r.mes: int(r.total or 0) for r in fornecedores_mes_rows}
+
+            evolucao_cadastros = {
+                "meses": meses_cad,
+                "produtos_por_mes": [produtos_map.get(m, 0) for m in meses_cad],
+                "fornecedores_por_mes": [fornecedores_map.get(m, 0) for m in meses_cad],
+            }
+        except Exception:
+            evolucao_cadastros = {
+                "meses": [],
+                "produtos_por_mes": [],
+                "fornecedores_por_mes": [],
+            }
+
     return templates.TemplateResponse(request, "dashboard.html", {
         "user": user,
         "total_produtos": int(total_produtos or 0),
@@ -339,7 +466,66 @@ async def dashboard(request: Request):
         "vendas_recentes": vendas_recentes,
         "meses_vendas": meses_set,
         "datasets_vendas": datasets_vendas,
+        "top_produtos_labels": top_produtos_labels,
+        "top_produtos_valores": top_produtos_valores,
+        "estoque_baixo": estoque_baixo,
+        "total_estoque_baixo": total_estoque_baixo,
+        "ticket_medio_empresas": ticket_medio_empresas,
+        "evolucao_cadastros": evolucao_cadastros,
     })
+
+
+# --- EXPORTAÇÃO CSV ---
+@app.get("/relatorio/csv")
+async def exportar_csv(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT TO_CHAR(DATE_TRUNC('month', v.data_venda), 'MM/YYYY') AS mes,
+                   DATE_TRUNC('month', v.data_venda) AS mes_dt,
+                   e.nome_fantasia AS empresa,
+                   COUNT(DISTINCT v.grupo_venda) AS total_vendas,
+                   ROUND(SUM(v.total), 2) AS faturamento,
+                   ROUND(SUM(v.total) / NULLIF(COUNT(DISTINCT v.grupo_venda), 0), 2) AS ticket_medio,
+                   COUNT(DISTINCT v.produto_id) AS produtos_unicos
+            FROM vendas v
+            JOIN produtos p ON v.produto_id = p.id
+            JOIN empresas e ON p.empresa_id = e.id
+            WHERE v.data_venda >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months'
+            GROUP BY mes, mes_dt, e.nome_fantasia
+            ORDER BY mes_dt, e.nome_fantasia
+        """)).fetchall()
+
+    buf = StringIO()
+    writer = csv.writer(buf, delimiter=";")
+    writer.writerow([
+        "Mês", "Empresa", "Total de Vendas",
+        "Faturamento (R$)", "Ticket Médio (R$)", "Produtos Únicos Vendidos",
+    ])
+    for r in rows:
+        writer.writerow([
+            r.mes,
+            r.empresa,
+            int(r.total_vendas or 0),
+            f"{float(r.faturamento or 0):.2f}".replace(".", ","),
+            f"{float(r.ticket_medio or 0):.2f}".replace(".", ","),
+            int(r.produtos_unicos or 0),
+        ])
+
+    registrar_log(
+        user.id, user.username, "EXPORTACAO_CSV",
+        f"Exportou relatório analítico ({len(rows)} linhas)",
+    )
+
+    csv_bytes = "\ufeff" + buf.getvalue()
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="relatorio_vendas.csv"'},
+    )
 
 
 # --- PRODUTOS ---
