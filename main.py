@@ -291,19 +291,53 @@ async def dashboard(request: Request):
 
 # --- PRODUTOS ---
 @app.get("/produtos", response_class=HTMLResponse)
-async def listar_produtos(request: Request):
+async def listar_produtos(
+    request: Request,
+    busca: str = Query(None),
+    empresa_id: str = Query(None),
+    page: int = Query(1, ge=1),
+    erro: str = Query(None)):
+
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
+    por_pagina = 20
+    offset = (page - 1) * por_pagina
+    empresa_id_int = int(empresa_id) if empresa_id else None
+
+    filtros = ["1=1"]
+    params: dict = {}
+
+    if busca:
+        filtros.append("(p.nome ILIKE :busca OR p.cor ILIKE :busca OR p.tamanho ILIKE :busca)")
+        params["busca"] = f"%{busca}%"
+
+    if empresa_id_int:
+        filtros.append("p.empresa_id = :empresa_id")
+        params["empresa_id"] = empresa_id_int
+
+    where_clause = "WHERE " + " AND ".join(filtros)
+
     with engine.connect() as conn:
-        produtos = conn.execute(text("""
+        total_produtos = conn.execute(text(f"""
+            SELECT COUNT(*)
+            FROM produtos p
+            {where_clause}
+        """), params).fetchone()[0]
+
+        params["limit"] = por_pagina
+        params["offset"] = offset
+
+        produtos = conn.execute(text(f"""
             SELECT p.*, e.nome_fantasia AS empresa_nome, f.nome AS fornecedor_nome
             FROM produtos p
             LEFT JOIN empresas e ON p.empresa_id = e.id
             LEFT JOIN fornecedores f ON p.fornecedor_id = f.id
+            {where_clause}
             ORDER BY p.id DESC
-        """)).fetchall()
+            LIMIT :limit OFFSET :offset
+        """), params).fetchall()
 
         empresas = conn.execute(
             text("SELECT id, nome_fantasia FROM empresas ORDER BY nome_fantasia")
@@ -313,11 +347,19 @@ async def listar_produtos(request: Request):
             text("SELECT id, nome FROM fornecedores ORDER BY nome")
         ).fetchall()
 
+    total_paginas = ceil(total_produtos / por_pagina) if total_produtos > 0 else 1
+
     return templates.TemplateResponse(request, "produtos.html", {
         "user": user,
         "produtos": produtos,
         "empresas": empresas,
-        "fornecedores": fornecedores
+        "fornecedores": fornecedores,
+        "page": page,
+        "total_paginas": total_paginas,
+        "total_produtos": total_produtos,
+        "busca": busca or "",
+        "filtro_empresa": empresa_id_int,
+        "erro": erro,
     })
 
 @app.post("/produtos/novo")
@@ -434,14 +476,29 @@ async def editar_produto(
     return RedirectResponse(url="/produtos", status_code=303)
 
 @app.get("/produtos/deletar/{id}")
-async def deletar_produto(id: int):
+async def deletar_produto(request: Request, id: int):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
     with engine.connect() as conn:
+        # Bloqueia exclusão se houver vendas vinculadas ao produto
+        vendas_count = conn.execute(
+            text("SELECT COUNT(*) FROM vendas WHERE produto_id = :id"),
+            {"id": id}
+        ).fetchone()[0]
+
+        if vendas_count > 0:
+            # Redireciona com flag de erro para o template exibir o alerta
+            return RedirectResponse(url="/produtos?erro=produto_com_vendas", status_code=303)
+
         conn.execute(
             text("DELETE FROM produtos WHERE id = :id"),
             {"id": id}
         )
         conn.commit()
 
+    registrar_log(user.id, user.username, "EXCLUSAO_PRODUTO", f"Produto ID: {id} excluído")
     return RedirectResponse(url="/produtos", status_code=303)
 
 
@@ -546,19 +603,51 @@ async def editar_usuario(
 
 # --- FORNECEDORES ---
 @app.get("/fornecedores", response_class=HTMLResponse)
-async def listar_fornecedores(request: Request):
+async def listar_fornecedores(
+    request: Request,
+    busca: str = Query(None),
+    page: int = Query(1, ge=1)):
+
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
+    por_pagina = 20
+    offset = (page - 1) * por_pagina
+
+    filtros = ["1=1"]
+    params: dict = {}
+
+    if busca:
+        filtros.append("(nome ILIKE :busca OR cnpj ILIKE :busca OR email ILIKE :busca)")
+        params["busca"] = f"%{busca}%"
+
+    where_clause = "WHERE " + " AND ".join(filtros)
+
     with engine.connect() as conn:
-        fornecedores = conn.execute(
-            text("SELECT * FROM fornecedores ORDER BY nome")
-        ).fetchall()
+        total_fornecedores = conn.execute(text(f"""
+            SELECT COUNT(*) FROM fornecedores {where_clause}
+        """), params).fetchone()[0]
+
+        params["limit"] = por_pagina
+        params["offset"] = offset
+
+        fornecedores = conn.execute(text(f"""
+            SELECT * FROM fornecedores
+            {where_clause}
+            ORDER BY nome
+            LIMIT :limit OFFSET :offset
+        """), params).fetchall()
+
+    total_paginas = ceil(total_fornecedores / por_pagina) if total_fornecedores > 0 else 1
 
     return templates.TemplateResponse(request, "fornecedores.html", {
         "user": user,
-        "fornecedores": fornecedores
+        "fornecedores": fornecedores,
+        "page": page,
+        "total_paginas": total_paginas,
+        "total_fornecedores": total_fornecedores,
+        "busca": busca or "",
     })
 
 @app.post("/fornecedores/editar/{id}")

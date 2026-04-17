@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Fornecedores - Estoque MEI{% endblock %}
+{% block title %}Fornecedores - Estoque{% endblock %}
 
 {% block content %}
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
         <h4 class="mb-0 fw-bold text-primary">
             <i class="fas fa-truck-loading me-2"></i>Gestão de Fornecedores
+            <span class="badge bg-secondary ms-2 fs-6">{{ total_fornecedores }}</span>
         </h4>
         <button class="btn btn-dark btn-sm shadow-sm" data-bs-toggle="modal" data-bs-target="#modalNovoFornecedor">
             <i class="fas fa-plus me-1"></i> Novo Fornecedor
@@ -14,14 +15,35 @@
     </div>
 
     <div class="card-body">
+
+        {# Barra de busca #}
+        <form method="GET" action="/fornecedores" class="row g-2 mb-3">
+            <div class="col-md-6">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" name="busca" class="form-control" placeholder="Buscar por nome, CNPJ ou e-mail..." value="{{ busca }}">
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-outline-primary w-100">Filtrar</button>
+            </div>
+            {% if busca %}
+            <div class="col-md-1">
+                <a href="/fornecedores" class="btn btn-outline-secondary w-100" title="Limpar filtro">
+                    <i class="fas fa-times"></i>
+                </a>
+            </div>
+            {% endif %}
+        </form>
+
         <div class="table-responsive">
             <table class="table table-hover align-middle">
                 <thead class="table-light">
                     <tr>
-                        <th style="width: 30%;">Nome / Empresa</th>
+                        <th style="width: 35%;">Nome / Empresa</th>
                         <th style="width: 20%;">CNPJ</th>
                         <th style="width: 20%;">Telefone</th>
-                        <th style="width: 15%; text-align: center;">Ações</th>
+                        <th style="width: 25%; text-align: center;">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -46,7 +68,6 @@
                             >
                                 <i class="fas fa-edit"></i>
                             </button>
-
                             <a
                                 href="/fornecedores/deletar/{{ f.id }}"
                                 class="btn btn-outline-danger btn-sm"
@@ -58,6 +79,7 @@
                         </td>
                     </tr>
 
+                    {# Modal de edição inline por fornecedor #}
                     <div class="modal fade" id="modalEditarFornecedor{{ f.id }}" tabindex="-1" aria-hidden="true">
                         <div class="modal-dialog modal-dialog-centered">
                             <div class="modal-content shadow-lg">
@@ -66,31 +88,26 @@
                                         <h5 class="modal-title fw-bold text-dark">
                                             <i class="fas fa-user-edit me-2"></i>Editar Fornecedor
                                         </h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                                     </div>
-
                                     <div class="modal-body p-4 text-start">
                                         <div class="mb-3">
                                             <label class="form-label">Nome do Fornecedor</label>
                                             <input type="text" name="nome" value="{{ f.nome }}" class="form-control" required>
                                         </div>
-
                                         <div class="mb-3">
                                             <label class="form-label">CNPJ</label>
                                             <input type="text" name="cnpj" value="{{ f.cnpj or '' }}" class="form-control" placeholder="00.000.000/0000-00">
                                         </div>
-
                                         <div class="mb-3">
                                             <label class="form-label">Telefone de Contato</label>
                                             <input type="text" name="telefone" value="{{ f.telefone or '' }}" class="form-control" placeholder="(00) 00000-0000">
                                         </div>
-
                                         <div class="mb-3">
                                             <label class="form-label">E-mail</label>
                                             <input type="email" name="email" value="{{ f.email or '' }}" class="form-control" placeholder="contato@fornecedor.com">
                                         </div>
                                     </div>
-
                                     <div class="modal-footer bg-light">
                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                                         <button type="submit" class="btn btn-warning fw-bold">Salvar Alterações</button>
@@ -99,19 +116,50 @@
                             </div>
                         </div>
                     </div>
+
                     {% else %}
                     <tr>
                         <td colspan="4" class="text-center py-5 text-muted">
-                            <i class="fas fa-info-circle me-2"></i>Nenhum fornecedor cadastrado.
+                            <i class="fas fa-info-circle fa-2x mb-2 d-block"></i>
+                            Nenhum fornecedor encontrado.
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+
+        {# Paginação #}
+        {% if total_paginas > 1 %}
+        <nav aria-label="Paginação de fornecedores">
+            <ul class="pagination pagination-sm justify-content-center mt-3">
+                <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                    <a class="page-link" href="?page={{ page - 1 }}{% if busca %}&busca={{ busca }}{% endif %}">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+                {% for p in range(1, total_paginas + 1) %}
+                <li class="page-item {% if p == page %}active{% endif %}">
+                    <a class="page-link" href="?page={{ p }}{% if busca %}&busca={{ busca }}{% endif %}">{{ p }}</a>
+                </li>
+                {% endfor %}
+                <li class="page-item {% if page >= total_paginas %}disabled{% endif %}">
+                    <a class="page-link" href="?page={{ page + 1 }}{% if busca %}&busca={{ busca }}{% endif %}">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+            <p class="text-center text-muted small">
+                Página {{ page }} de {{ total_paginas }} &mdash; {{ total_fornecedores }} fornecedor(es) encontrado(s)
+            </p>
+        </nav>
+        {% endif %}
+
     </div>
 </div>
 
+
+{# Modal: Novo Fornecedor #}
 <div class="modal fade" id="modalNovoFornecedor" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow-lg">
@@ -120,9 +168,8 @@
                     <h5 class="modal-title fw-bold">
                         <i class="fas fa-plus-circle me-2"></i>Novo Fornecedor
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
                 </div>
-
                 <div class="modal-body p-4 text-start">
                     <label class="form-label fw-bold">CNPJ</label>
                     <div class="input-group mb-3">
@@ -131,25 +178,20 @@
                             <i class="fas fa-search me-1"></i> Buscar CNPJ
                         </button>
                     </div>
-
                     <div class="mb-3">
                         <label class="form-label">Nome do Fornecedor</label>
                         <input type="text" id="nome_fornecedor" name="nome" class="form-control" placeholder="Ex: Tecidos Helena LTDA" required>
                     </div>
-
                     <div class="mb-3">
                         <label class="form-label">Telefone</label>
                         <input type="text" id="telefone_fornecedor" name="telefone" class="form-control" placeholder="(00) 00000-0000">
                     </div>
-
                     <div class="mb-3">
                         <label class="form-label">E-mail</label>
                         <input type="email" id="email_fornecedor" name="email" class="form-control" placeholder="contato@fornecedor.com">
                     </div>
-
                     <div id="cnpj-status-fornecedor" class="small text-muted"></div>
                 </div>
-
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                     <button type="submit" class="btn btn-primary fw-bold">Cadastrar Fornecedor</button>
@@ -174,9 +216,9 @@ function aplicarMascaraCNPJ(valor) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-    const cnpjFornecedorInput = document.getElementById("cnpj_fornecedor");
-    if (cnpjFornecedorInput) {
-        cnpjFornecedorInput.addEventListener("input", function () {
+    const cnpjInput = document.getElementById("cnpj_fornecedor");
+    if (cnpjInput) {
+        cnpjInput.addEventListener("input", function () {
             this.value = aplicarMascaraCNPJ(this.value);
         });
     }
@@ -198,22 +240,18 @@ async function consultarCNPJFornecedor() {
 
     try {
         const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
-        if (!response.ok) {
-            throw new Error("Não foi possível consultar o CNPJ.");
-        }
+        if (!response.ok) throw new Error("Não encontrado.");
 
         const data = await response.json();
-
         document.getElementById("nome_fornecedor").value = data.nome_fantasia || data.razao_social || "";
         document.getElementById("telefone_fornecedor").value = data.ddd_telefone_1 || data.ddd_telefone_2 || "";
         document.getElementById("email_fornecedor").value = data.email || "";
 
         status.className = "small text-success";
-        status.textContent = "Dados encontrados e preenchidos com sucesso.";
+        status.textContent = "Dados preenchidos com sucesso.";
     } catch (error) {
-        console.error(error);
         status.className = "small text-danger";
-        status.textContent = "Erro ao consultar o CNPJ. Verifique se ele é válido ou tente novamente.";
+        status.textContent = "Erro ao consultar o CNPJ. Verifique se ele é válido.";
     }
 }
 </script>
