@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Form, Request, Depends, Query
+from fastapi import FastAPI, Form, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from io import BytesIO
 from reportlab.lib.pagesizes import A4
@@ -8,7 +8,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from datetime import date
 from decimal import Decimal
@@ -142,7 +141,7 @@ async def lifespan(app: FastAPI):
             ALTER TABLE vendas
             ADD COLUMN IF NOT EXISTS grupo_venda VARCHAR(36)
         """))
-        
+
         conn.execute(text("""
             INSERT INTO usuarios (username, password, perfil)
             VALUES ('admin', :senha, 'admin')
@@ -150,9 +149,9 @@ async def lifespan(app: FastAPI):
         """), {"senha": hash_password("123456")})
 
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_data_evento ON logs_sistema (data_evento DESC)"))
-        
+
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_acao ON logs_sistema (acao)"))
-        
+
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_username ON logs_sistema (username)"))
 
         conn.commit()
@@ -496,7 +495,7 @@ async def editar_produto(
     fornecedor_id: int = Form(...),
     cor: str = Form(None),
     tamanho: str = Form(None),):
-    
+
     with engine.connect() as conn:
         conn.execute(text("""
             UPDATE produtos
@@ -572,7 +571,7 @@ async def novo_usuario(
     username: str = Form(...),
     password: str = Form(...),
     perfil: str = Form(...)):
-    
+
     user = get_current_user(request)
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
@@ -613,7 +612,7 @@ async def editar_usuario(
     username: str = Form(...),
     perfil: str = Form(...),
     password: str = Form(None)):
-    
+
     user = get_current_user(request)
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
@@ -787,7 +786,7 @@ async def pagina_vendas(
     # converte strings da query em int, se tiver valor
     fornecedor_id_int = int(fornecedor_id) if fornecedor_id else None
     empresa_id_int = int(empresa_id) if empresa_id else None
-    
+
     filtros = ["1=1"]
     params: dict[str, object] = {}
 
@@ -1015,7 +1014,7 @@ async def relatorio_vendas_pdf(
 
     fornecedor_id_int = int(fornecedor_id) if fornecedor_id else None
     empresa_id_int = int(empresa_id) if empresa_id else None
-    
+
     filtros = ["1=1"]
     params: dict[str, object] = {}
 
