@@ -32,23 +32,182 @@ Sistema web full-stack para controle de estoque e vendas voltado a microempreend
 
 ---
 
-## Requisitos Atendidos — Checklist PJI310
+## Requisitos Atendidos — PJI310
 
 | Requisito | Tecnologia / Evidência |
 |---|---|
 | Framework web | FastAPI (Python 3.13) |
 | Banco de dados | PostgreSQL + SQLAlchemy 2.x |
 | Script web (JS) | Chart.js, máscaras, validação CPF, modais Bootstrap |
-| Nuvem | Render.com |
-| Controle de versão | Git / GitHub |
-| API | `GET /api/produtos/{empresa_id}` |
-| Integração Contínua | GitHub Actions (lint ruff + pytest + cobertura) |
+| Nuvem | Render.com — deploy automático via CI/CD |
+| Controle de versão | Git / GitHub — histórico com mensagens convencionais |
+| API REST | `GET /api/produtos/{empresa_id}` — JSON autenticado |
+| Integração Contínua | GitHub Actions — lint + testes + cobertura a cada push |
 | Testes automatizados | Pytest — **55 testes, 47% de cobertura** |
-| Acessibilidade | WCAG 2.1 AA (ARIA, skip link, roles, contraste AA) |
-| Análise de dados | Dashboard com 5 gráficos e exportação CSV |
-| Integração externa | BrasilAPI — consulta CNPJ com situação cadastral Receita Federal |
+| Acessibilidade | WCAG 2.1 AA — ARIA completo em todos os templates |
+| Análise de dados | Dashboard com 5 gráficos (Chart.js) e exportação CSV |
+| Integração externa | BrasilAPI — CNPJ com situação cadastral Receita Federal |
 
 > 📋 [Issue #1 — Evidência formal de qualidade (CI, testes, cobertura, acessibilidade)](https://github.com/gustavosdefreitas/Plataforma-de-Gestao-Estrategica-Textil/issues/1)
+
+---
+
+## CI/CD — Integração e Entrega Contínua
+
+O pipeline é definido em `.github/workflows/python-app.yaml` e executa automaticamente em todo push ou pull request para o branch `main`. É composto por dois jobs sequenciais — o job de testes só inicia se o lint passar.
+
+```
+push → main
+  └─ [1] Lint (ruff)          → verifica estilo PEP 8 e erros lógicos
+        └─ [2] Testes (pytest) → roda 55 testes contra PostgreSQL 16 efêmero
+              └─ Artefato: coverage.xml (retido 30 dias)
+              └─ Deploy automático: Render.com detecta o push e reimplanta
+```
+
+**Job 1 — Lint**
+```bash
+ruff check . --select E,F,W --ignore E501
+# E = erros PEP 8 | F = erros lógicos (imports, variáveis) | W = avisos
+```
+
+**Job 2 — Testes + cobertura** (depende do Job 1)
+```bash
+pytest test_main.py -v \
+  --cov=main \
+  --cov-report=term-missing \
+  --cov-report=xml \
+  --tb=short
+```
+O banco de testes é um PostgreSQL 16 efêmero provisionado pelo próprio Actions (`services.postgres`), garantindo isolamento total do ambiente de produção.
+
+[![CI](https://github.com/gustavosdefreitas/Plataforma-de-Gestao-Estrategica-Textil/actions/workflows/python-app.yaml/badge.svg)](https://github.com/gustavosdefreitas/Plataforma-de-Gestao-Estrategica-Textil/actions/workflows/python-app.yaml)
+
+---
+
+## Testes Automatizados e Cobertura
+
+**55 testes — todos passando** | Cobertura: **47% de `main.py`**
+
+A suite está em `test_main.py` e usa `pytest` com `TestClient` do FastAPI. Cada teste opera contra um banco PostgreSQL isolado, com limpeza via `TRUNCATE … RESTART IDENTITY CASCADE` antes de cada caso.
+
+```bash
+# Executar localmente
+export DATABASE_URL="postgresql://usuario:senha@localhost:5432/test_db"
+pip install -r requirements-dev.txt
+pytest test_main.py -v --cov=main --cov-report=term-missing
+```
+
+| Módulo de teste | Casos | O que cobre |
+|---|---|---|
+| `TestAutenticacao` | 5 | Login, logout, senha errada, usuário inexistente, cookie de sessão |
+| `TestProtecaoRotas` | 9 | Redirecionamento para `/login` sem sessão em todas as rotas protegidas |
+| `TestEmpresas` | 3 | Criar, listar, deletar empresa |
+| `TestFornecedores` | 5 | Criar, editar, listar, buscar, deletar fornecedor |
+| `TestSituacaoCadastralEmpresas` | 6 | Persistência de `situacao_cadastral`, normalização maiúsculo, exibição de badge |
+| `TestSituacaoCadastralFornecedores` | 6 | Idem para fornecedores |
+| `TestProdutos` | 7 | CRUD completo; bloqueio de deleção com vendas vinculadas |
+| `TestVendas` | 3 | Registrar venda, baixa de estoque, proteção sem auth |
+| `TestAPI` | 3 | `/api/produtos/{id}` autenticado, não autenticado, empresa inexistente |
+| `TestRestricaoPerfil` | 4 | Restrição de `/logs` e `/banco-horas` para perfil `admin` |
+| `TestDashboard` | 2 | Renderização do dashboard e cards de resumo |
+| **Total** | **55** | |
+
+---
+
+## Acessibilidade — WCAG 2.1 AA
+
+Todos os 14 templates HTML foram auditados e corrigidos para atender ao nível AA da WCAG 2.1.
+
+**Navegação e estrutura**
+- `<html lang="pt-BR">` — idioma declarado no documento
+- Skip link `<a href="#conteudo-principal" class="visually-hidden-focusable">Pular para o conteúdo principal</a>` em `base.html`
+- `<main id="conteudo-principal" role="main">` — landmark de conteúdo principal
+- `<nav aria-label="Navegação principal">` na barra de navegação
+
+**Formulários**
+- Todo `<input>`, `<select>` e `<textarea>` tem `<label for="...">` associado
+- Campos obrigatórios marcados com `required` + `aria-required="true"`
+- Campos de busca com `role="search"` + `aria-label` no `<form>`
+- Todos os formulários de ação com `aria-label` descritivo
+- `autocomplete` nos campos de login (`username`, `current-password`)
+
+**Modais e interação**
+- Todos os modais Bootstrap com `role="dialog"`, `aria-modal="true"` e `aria-labelledby`
+- Botões de fechar com `aria-label="Fechar"`
+- Botões de ação nas tabelas (editar/excluir) com `aria-label="Editar [nome]"` / `aria-label="Excluir [nome]"`
+
+**Feedback dinâmico**
+- Status de consulta CNPJ com `role="status"` e `aria-live="polite"`
+- Mensagens de erro com `role="alert"` e `aria-live="assertive"`
+- Toast de flash messages com `aria-live="polite"` e `aria-atomic="true"`
+
+**Tabelas e gráficos**
+- `<caption class="visually-hidden">` em todas as tabelas de dados
+- `scope="col"` em todos os cabeçalhos de tabela `<th>`
+- Canvas Chart.js com `role="img"` e `aria-label` descritivo em todos os gráficos
+- Ícones Font Awesome decorativos com `aria-hidden="true"`
+
+**Paginação**
+- `<nav aria-label="Paginação de ...">` em todas as páginas com paginação
+- Página ativa com `aria-current="page"`
+- Links de anterior/próxima com `aria-label` explícito
+
+---
+
+## API REST
+
+**Endpoint:** `GET /api/produtos/{empresa_id}`
+
+Retorna o estoque de produtos de uma empresa em formato JSON. Requer sessão autenticada (cookie `session_id`).
+
+**Autenticação**
+```
+Cookie: session_id=<hash>
+```
+Sem autenticação retorna `401 Unauthorized`:
+```json
+{ "erro": "Não autenticado" }
+```
+
+**Resposta com sucesso (`200 OK`)**
+```json
+{
+  "empresa_id": 1,
+  "estoque": [
+    { "nome": "Camiseta Branca M", "quantidade": 42.0, "preco": 29.90 },
+    { "nome": "Calça Jeans 40",    "quantidade": 15.0, "preco": 89.90 }
+  ]
+}
+```
+
+**Exemplo com curl**
+```bash
+curl -b "session_id=SEU_TOKEN" \
+  https://plataforma-de-gestao-estrategica-textil.onrender.com/api/produtos/1
+```
+
+---
+
+## Deploy — Render.com
+
+A aplicação está hospedada no [Render.com](https://render.com) com deploy automático ativado no branch `main`. A cada push que passa no CI, o Render detecta a mudança e reimplanta automaticamente.
+
+| Componente | Configuração |
+|---|---|
+| Plataforma | Render.com (Web Service) |
+| Runtime | Python 3.13 |
+| Comando de start | `uvicorn main:app --host 0.0.0.0 --port 10000` |
+| Banco de dados | PostgreSQL 16 (Render Managed Database) |
+| Branch monitorado | `main` |
+| Deploy automático | Ativado — a cada push no `main` |
+
+**Variável de ambiente obrigatória**
+
+| Variável | Descrição |
+|---|---|
+| `DATABASE_URL` | URL de conexão PostgreSQL (`postgresql://...`) |
+
+🌐 **URL de produção:** https://plataforma-de-gestao-estrategica-textil.onrender.com
 
 ---
 
