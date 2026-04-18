@@ -767,8 +767,8 @@ class TestSituacaoCadastralEmpresas:
             data={
                 "nome": "Empresa Teste",
                 "cnpj": "00.000.000/0001-00",
-                "tel": "",
-                "email": "",
+                "tel": "11999999999",
+                "email": "empresa@teste.com",
                 "situacao_cadastral": "ativa",
             },
             cookies=session_admin,
