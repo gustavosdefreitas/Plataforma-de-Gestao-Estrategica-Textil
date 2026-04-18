@@ -109,14 +109,6 @@ async def lifespan(app: FastAPI):
         """))
 
         conn.execute(text("""
-            ALTER TABLE empresas ADD COLUMN IF NOT EXISTS situacao_cadastral VARCHAR(30);
-        """))
-
-        conn.execute(text("""
-            ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS situacao_cadastral VARCHAR(30);
-        """))
-
-        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS empresas (
                 id SERIAL PRIMARY KEY,
                 cnpj VARCHAR(20) NOT NULL,
@@ -130,6 +122,10 @@ async def lifespan(app: FastAPI):
         """))
 
         conn.execute(text("""
+            ALTER TABLE empresas ADD COLUMN IF NOT EXISTS situacao_cadastral VARCHAR(30);
+        """))
+
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS fornecedores (
                 id SERIAL PRIMARY KEY,
                 nome VARCHAR(100) NOT NULL,
@@ -137,6 +133,10 @@ async def lifespan(app: FastAPI):
                 telefone VARCHAR(20),
                 email VARCHAR(100)
             );
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS situacao_cadastral VARCHAR(30);
         """))
 
         conn.execute(text("""
