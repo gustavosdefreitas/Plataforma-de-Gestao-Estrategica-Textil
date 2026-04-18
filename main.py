@@ -1929,61 +1929,58 @@ async def banco_horas_pdf(
     except ValueError:
         data_fim = None
 
-    filtros = ["acao IN ('LOGIN', 'LOGOUT')"]
+    filtros = ["l.acao IN ('LOGIN', 'LOGOUT')"]
     params = {}
 
     if usuario:
-        filtros.append("username = :usuario")
+        filtros.append("l.username = :usuario")
         params["usuario"] = usuario
 
     if data_inicio:
-        filtros.append("DATE(data_evento) >= :data_inicio")
+        filtros.append("DATE(l.data_evento) >= :data_inicio")
         params["data_inicio"] = data_inicio
 
     if data_fim:
-        filtros.append("DATE(data_evento) <= :data_fim")
+        filtros.append("DATE(l.data_evento) <= :data_fim")
         params["data_fim"] = data_fim
 
     where_clause = "WHERE " + " AND ".join(filtros)
 
-    # Limite máximo de 8h para sessões sem LOGOUT (evita inflação)
     LIMITE_HORAS = 8
 
     query = f"""
         WITH eventos AS (
             SELECT
-                username,
-                acao,
-                data_evento,
-                DATE(data_evento) AS dia,
-                LEAD(data_evento) OVER (
-                    PARTITION BY username, DATE(data_evento)
-                    ORDER BY data_evento
+                l.username,
+                COALESCE(u.nome_completo, l.username) AS nome_completo,
+                COALESCE(u.cpf, '') AS cpf,
+                l.acao,
+                l.data_evento,
+                DATE(l.data_evento) AS dia,
+                LEAD(l.data_evento) OVER (
+                    PARTITION BY l.username, DATE(l.data_evento)
+                    ORDER BY l.data_evento
                 ) AS proximo_evento,
-                LEAD(acao) OVER (
-                    PARTITION BY username, DATE(data_evento)
-                    ORDER BY data_evento
+                LEAD(l.acao) OVER (
+                    PARTITION BY l.username, DATE(l.data_evento)
+                    ORDER BY l.data_evento
                 ) AS proxima_acao
-            FROM logs_sistema
+            FROM logs_sistema l
+            LEFT JOIN usuarios u ON u.username = l.username
             {where_clause}
         ),
         pares AS (
             SELECT
                 username,
+                nome_completo,
+                cpf,
                 dia,
-                acao,
-                data_evento,
-                proxima_acao,
-                proximo_evento,
                 CASE
-                    -- Par limpo: LOGIN seguido de LOGOUT
                     WHEN acao = 'LOGIN' AND proxima_acao = 'LOGOUT'
                         THEN LEAST(
                             EXTRACT(EPOCH FROM (proximo_evento - data_evento)) / 3600,
                             {LIMITE_HORAS}
                         )
-                    -- LOGIN sem LOGOUT: usa horário atual se for hoje,
-                    -- ou fim do dia (23:59) caso contrário — máx. 8h
                     WHEN acao = 'LOGIN' AND proxima_acao IS NULL
                         THEN LEAST(
                             EXTRACT(EPOCH FROM (
@@ -2003,60 +2000,132 @@ async def banco_horas_pdf(
         )
         SELECT
             username,
+            nome_completo,
+            cpf,
             dia,
             ROUND(SUM(horas_sessao)::numeric, 2) AS horas_trabalhadas
         FROM pares
-        GROUP BY username, dia
-        ORDER BY dia DESC, username
+        GROUP BY username, nome_completo, cpf, dia
+        ORDER BY username, dia
     """
 
     with engine.connect() as conn:
         resultados = conn.execute(text(query), params).fetchall()
 
-    total_horas = sum(float(item.horas_trabalhadas or 0) for item in resultados)
+    total_geral = sum(float(r.horas_trabalhadas or 0) for r in resultados)
 
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     largura, altura = A4
+    MARGEM = 50
+    COL_HORAS = 400
 
-    y = altura - 50
+    def nova_pagina(pdf, altura):
+        pdf.showPage()
+        return altura - MARGEM
+
+    def cabecalho_tabela(pdf, y):
+        pdf.setFillColorRGB(0.2, 0.2, 0.2)
+        pdf.rect(MARGEM, y - 4, largura - 2 * MARGEM, 18, fill=1, stroke=0)
+        pdf.setFillColorRGB(1, 1, 1)
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(MARGEM + 4, y + 1, "Data de Acesso")
+        pdf.drawString(COL_HORAS, y + 1, "Tempo no Sistema")
+        pdf.setFillColorRGB(0, 0, 0)
+        return y - 22
+
+    # ── Cabeçalho do documento ───────────────────────────────────────────
+    y = altura - MARGEM
+
     pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(50, y, "Relatório de Banco de Horas")
-
-    y -= 30
-    pdf.setFont("Helvetica", 10)
-    pdf.drawString(50, y, f"Usuário: {usuario or 'Todos'}")
-
+    pdf.drawString(MARGEM, y, "Relatório de Banco de Horas")
     y -= 20
-    pdf.drawString(50, y, f"Período: {data_inicio or '---'} até {data_fim or '---'}")
 
+    pdf.setFont("Helvetica", 9)
+    pdf.setFillColorRGB(0.4, 0.4, 0.4)
+    periodo_txt = f"Período: {data_inicio or 'início'} até {data_fim or 'hoje'}"
+    pdf.drawString(MARGEM, y, periodo_txt)
+    pdf.drawRightString(largura - MARGEM, y, f"Gerado em: {date.today().strftime('%d/%m/%Y')}")
+    pdf.setFillColorRGB(0, 0, 0)
+    y -= 6
+
+    pdf.setStrokeColorRGB(0.7, 0.7, 0.7)
+    pdf.line(MARGEM, y, largura - MARGEM, y)
     y -= 20
-    pdf.drawString(50, y, f"Total de horas: {formatar_horas_minutos(total_horas)} h")
 
-    y -= 30
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(50, y, "Usuário")
-    pdf.drawString(220, y, "Data")
-    pdf.drawString(380, y, "Horas")
+    # ── Seção por usuário ────────────────────────────────────────────────
+    usuarios_agrupados = {}
+    for r in resultados:
+        key = r.username
+        if key not in usuarios_agrupados:
+            usuarios_agrupados[key] = {
+                "nome_completo": r.nome_completo,
+                "cpf": r.cpf,
+                "registros": []
+            }
+        usuarios_agrupados[key]["registros"].append(r)
 
-    y -= 20
-    pdf.setFont("Helvetica", 10)
+    for username, dados in usuarios_agrupados.items():
+        nome = dados["nome_completo"] or username
+        cpf_fmt = dados["cpf"] or "Não informado"
+        registros = dados["registros"]
+        total_usuario = sum(float(r.horas_trabalhadas or 0) for r in registros)
 
-    for item in resultados:
-        if y < 50:
-            pdf.showPage()
-            y = altura - 50
-            pdf.setFont("Helvetica-Bold", 10)
-            pdf.drawString(50, y, "Usuário")
-            pdf.drawString(220, y, "Data")
-            pdf.drawString(380, y, "Horas")
-            y -= 20
-            pdf.setFont("Helvetica", 10)
+        # Espaço mínimo para o bloco do usuário (cabeçalho + 1 linha)
+        if y < 120:
+            y = nova_pagina(pdf, altura)
 
-        pdf.drawString(50, y, str(item.username))
-        pdf.drawString(220, y, str(item.dia))
-        pdf.drawString(380, y, formatar_horas_minutos(item.horas_trabalhadas))
-        y -= 18
+        # Bloco de identificação do usuário
+        pdf.setFillColorRGB(0.93, 0.96, 1.0)
+        pdf.rect(MARGEM, y - 6, largura - 2 * MARGEM, 52, fill=1, stroke=0)
+        pdf.setFillColorRGB(0, 0, 0)
+
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(MARGEM + 8, y + 36, nome)
+
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(MARGEM + 8, y + 22, f"Login: {username}")
+        pdf.drawString(MARGEM + 8, y + 10, f"CPF: {cpf_fmt}")
+        pdf.drawRightString(largura - MARGEM - 8, y + 10,
+                            f"Total: {formatar_horas_minutos(total_usuario)}")
+
+        y -= 62
+
+        # Cabeçalho da tabela de datas
+        y = cabecalho_tabela(pdf, y)
+
+        # Linhas de registros
+        pdf.setFont("Helvetica", 9)
+        for i, reg in enumerate(registros):
+            if y < 50:
+                y = nova_pagina(pdf, altura)
+                y = cabecalho_tabela(pdf, y)
+                pdf.setFont("Helvetica", 9)
+
+            # Zebra
+            if i % 2 == 0:
+                pdf.setFillColorRGB(0.97, 0.97, 0.97)
+                pdf.rect(MARGEM, y - 4, largura - 2 * MARGEM, 16, fill=1, stroke=0)
+                pdf.setFillColorRGB(0, 0, 0)
+
+            data_fmt = reg.dia.strftime("%d/%m/%Y") if hasattr(reg.dia, "strftime") else str(reg.dia)
+            pdf.drawString(MARGEM + 4, y, data_fmt)
+            pdf.drawString(COL_HORAS, y, formatar_horas_minutos(reg.horas_trabalhadas))
+            y -= 18
+
+        y -= 16  # espaço entre usuários
+
+    # ── Rodapé com total geral ───────────────────────────────────────────
+    if y < 60:
+        y = nova_pagina(pdf, altura)
+
+    pdf.setStrokeColorRGB(0.3, 0.3, 0.3)
+    pdf.line(MARGEM, y, largura - MARGEM, y)
+    y -= 16
+
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(MARGEM, y, "TOTAL GERAL DE HORAS:")
+    pdf.drawString(COL_HORAS, y, formatar_horas_minutos(total_geral))
 
     pdf.save()
     buffer.seek(0)
