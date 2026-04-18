@@ -46,26 +46,6 @@ def formatar_cpf(cpf: str) -> str:
     return f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}" if len(cpf) == 11 else cpf
 
 
-def validar_cpf(cpf: str) -> bool:
-    """Valida CPF verificando os dois dígitos verificadores."""
-    cpf = ''.join(c for c in cpf if c.isdigit())
-    if len(cpf) != 11 or len(set(cpf)) == 1:
-        return False
-    # Primeiro dígito verificador
-    soma = sum(int(cpf[i]) * (10 - i) for i in range(9))
-    d1 = (soma * 10 % 11) % 10
-    if d1 != int(cpf[9]):
-        return False
-    # Segundo dígito verificador
-    soma = sum(int(cpf[i]) * (11 - i) for i in range(10))
-    d2 = (soma * 10 % 11) % 10
-    return d2 == int(cpf[10])
-
-def formatar_cpf(cpf: str) -> str:
-    """Formata CPF como 000.000.000-00."""
-    cpf = ''.join(c for c in cpf if c.isdigit())
-    return f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}" if len(cpf) == 11 else cpf
-
 def formatar_horas_minutos(valor):
     total_minutos = round(float(valor) * 60)
     horas = total_minutos // 60
