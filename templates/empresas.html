@@ -21,6 +21,7 @@
                     <tr>
                         <th scope="col">Nome Fantasia</th>
                         <th scope="col">CNPJ</th>
+                        <th scope="col">Situação</th>
                         <th scope="col">Contato</th>
                         <th scope="col" class="text-center">Ações</th>
                     </tr>
@@ -30,6 +31,17 @@
                     <tr>
                         <td class="fw-bold">{{ e.nome_fantasia }}</td>
                         <td>{{ e.cnpj }}</td>
+                        <td>
+                            {% if e.situacao_cadastral == 'ATIVA' %}
+                                <span class="badge bg-success">ATIVA</span>
+                            {% elif e.situacao_cadastral in ['INAPTA', 'SUSPENSA', 'BAIXADA', 'CANCELADA'] %}
+                                <span class="badge bg-danger">{{ e.situacao_cadastral }}</span>
+                            {% elif e.situacao_cadastral %}
+                                <span class="badge bg-warning text-dark">{{ e.situacao_cadastral }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
                         <td>
                             {{ e.email }}<br>
                             <small class="text-muted">{{ e.telefone }}</small>
@@ -45,7 +57,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="4" class="text-center py-4">Nenhuma empresa cadastrada.</td>
+                        <td colspan="5" class="text-center py-4">Nenhuma empresa cadastrada.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -81,6 +93,7 @@
                 <input type="email" id="email" name="email" placeholder="E-mail" class="form-control mb-3">
 
                 <div id="cnpj-status" class="small text-muted" role="status" aria-live="polite"></div>
+                <input type="hidden" id="situacao_cadastral" name="situacao_cadastral" value="">
             </div>
 
             <div class="modal-footer">
@@ -149,6 +162,9 @@ async function consultarCNPJ() {
         const badgeHtml = sit
             ? ` <span class="badge ${badgeClass}">${sit}</span>`
             : "";
+
+        const hiddenSit = document.getElementById("situacao_cadastral");
+        if (hiddenSit) hiddenSit.value = sit;
 
         status.className = "small text-success";
         status.innerHTML = "Dados encontrados e preenchidos com sucesso." + badgeHtml;

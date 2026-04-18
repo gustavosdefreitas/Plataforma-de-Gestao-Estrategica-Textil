@@ -109,6 +109,14 @@ async def lifespan(app: FastAPI):
         """))
 
         conn.execute(text("""
+            ALTER TABLE empresas ADD COLUMN IF NOT EXISTS situacao_cadastral VARCHAR(30);
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS situacao_cadastral VARCHAR(30);
+        """))
+
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS empresas (
                 id SERIAL PRIMARY KEY,
                 cnpj VARCHAR(20) NOT NULL,
@@ -946,7 +954,8 @@ async def editar_fornecedor(
     nome: str = Form(...),
     cnpj: str = Form(None),
     telefone: str = Form(None),
-    email: str = Form(None)):
+    email: str = Form(None),
+    situacao_cadastral: str = Form(None)):
 
     user = get_current_user(request)
     if not user:
@@ -958,13 +967,15 @@ async def editar_fornecedor(
             SET nome = :nome,
                 cnpj = :cnpj,
                 telefone = :telefone,
-                email = :email
+                email = :email,
+                situacao_cadastral = :situacao_cadastral
             WHERE id = :id
         """), {
             "nome": nome,
             "cnpj": cnpj,
             "telefone": telefone,
             "email": email,
+            "situacao_cadastral": (situacao_cadastral or "").upper() or None,
             "id": id
         })
         conn.commit()
@@ -977,7 +988,8 @@ async def novo_fornecedor(
     nome: str = Form(...),
     cnpj: str = Form(None),
     telefone: str = Form(None),
-    email: str = Form(None)):
+    email: str = Form(None),
+    situacao_cadastral: str = Form(None)):
 
     user = get_current_user(request)
     if not user:
@@ -985,13 +997,14 @@ async def novo_fornecedor(
 
     with engine.connect() as conn:
         conn.execute(text("""
-            INSERT INTO fornecedores (nome, cnpj, telefone, email)
-            VALUES (:nome, :cnpj, :telefone, :email)
+            INSERT INTO fornecedores (nome, cnpj, telefone, email, situacao_cadastral)
+            VALUES (:nome, :cnpj, :telefone, :email, :situacao_cadastral)
         """), {
             "nome": nome,
             "cnpj": cnpj,
             "telefone": telefone,
             "email": email,
+            "situacao_cadastral": (situacao_cadastral or "").upper() or None,
         })
         conn.commit()
 
@@ -1619,18 +1632,20 @@ async def nova_empresa(
     razao_social: str = Form(...),
     cnpj: str = Form(""),
     tel: str = Form(""),
-    email: str = Form("")):
+    email: str = Form(""),
+    situacao_cadastral: str = Form("")):
 
     with engine.connect() as conn:
         conn.execute(text("""
-            INSERT INTO empresas (nome_fantasia, razao_social, cnpj, telefone, email)
-            VALUES (:nome, :razao_social, :cnpj, :telefone, :email)
+            INSERT INTO empresas (nome_fantasia, razao_social, cnpj, telefone, email, situacao_cadastral)
+            VALUES (:nome, :razao_social, :cnpj, :telefone, :email, :situacao_cadastral)
         """), {
             "nome": nome,
             "razao_social": razao_social,
             "cnpj": cnpj,
             "telefone": tel,
-            "email": email
+            "email": email,
+            "situacao_cadastral": (situacao_cadastral or "").upper() or None
         })
         conn.commit()
 
@@ -1673,7 +1688,8 @@ async def atualizar_empresa(
     nome: str = Form(...),
     cnpj: str = Form(...),
     tel: str = Form(...),
-    email: str = Form(...)):
+    email: str = Form(...),
+    situacao_cadastral: str = Form("")):
 
     with engine.connect() as conn:
         conn.execute(text("""
@@ -1681,13 +1697,15 @@ async def atualizar_empresa(
             SET nome_fantasia = :nome,
                 cnpj = :cnpj,
                 telefone = :telefone,
-                email = :email
+                email = :email,
+                situacao_cadastral = :situacao_cadastral
             WHERE id = :id
         """), {
             "nome": nome,
             "cnpj": cnpj,
             "telefone": tel,
             "email": email,
+            "situacao_cadastral": (situacao_cadastral or "").upper() or None,
             "id": id
         })
         conn.commit()
