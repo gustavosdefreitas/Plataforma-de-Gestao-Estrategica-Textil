@@ -27,6 +27,45 @@ engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 def hash_password(password: str):
     return hashlib.sha256(password.encode()).hexdigest()
 
+def validar_cpf(cpf: str) -> bool:
+    """Valida CPF verificando os dois dígitos verificadores."""
+    cpf = ''.join(c for c in cpf if c.isdigit())
+    if len(cpf) != 11 or len(set(cpf)) == 1:
+        return False
+    soma = sum(int(cpf[i]) * (10 - i) for i in range(9))
+    d1 = (soma * 10 % 11) % 10
+    if d1 != int(cpf[9]):
+        return False
+    soma = sum(int(cpf[i]) * (11 - i) for i in range(10))
+    d2 = (soma * 10 % 11) % 10
+    return d2 == int(cpf[10])
+
+def formatar_cpf(cpf: str) -> str:
+    """Formata CPF como 000.000.000-00."""
+    cpf = ''.join(c for c in cpf if c.isdigit())
+    return f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}" if len(cpf) == 11 else cpf
+
+
+def validar_cpf(cpf: str) -> bool:
+    """Valida CPF verificando os dois dígitos verificadores."""
+    cpf = ''.join(c for c in cpf if c.isdigit())
+    if len(cpf) != 11 or len(set(cpf)) == 1:
+        return False
+    # Primeiro dígito verificador
+    soma = sum(int(cpf[i]) * (10 - i) for i in range(9))
+    d1 = (soma * 10 % 11) % 10
+    if d1 != int(cpf[9]):
+        return False
+    # Segundo dígito verificador
+    soma = sum(int(cpf[i]) * (11 - i) for i in range(10))
+    d2 = (soma * 10 % 11) % 10
+    return d2 == int(cpf[10])
+
+def formatar_cpf(cpf: str) -> str:
+    """Formata CPF como 000.000.000-00."""
+    cpf = ''.join(c for c in cpf if c.isdigit())
+    return f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}" if len(cpf) == 11 else cpf
+
 def formatar_horas_minutos(valor):
     total_minutos = round(float(valor) * 60)
     horas = total_minutos // 60
@@ -78,10 +117,15 @@ async def lifespan(app: FastAPI):
             CREATE TABLE IF NOT EXISTS usuarios (
                 id SERIAL PRIMARY KEY,
                 username VARCHAR(50) UNIQUE NOT NULL,
+                nome_completo VARCHAR(150),
+                cpf VARCHAR(14),
                 password VARCHAR(64) NOT NULL,
                 perfil VARCHAR(20) DEFAULT 'user',
                 session_id VARCHAR(36)
             );
+            -- Migração: adiciona colunas se a tabela já existia sem elas
+            ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS nome_completo VARCHAR(150);
+            ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cpf VARCHAR(14);
         """))
 
         conn.execute(text("""
@@ -750,7 +794,7 @@ async def listar_usuarios(request: Request):
 
     with engine.connect() as conn:
         usuarios = conn.execute(
-            text("SELECT id, username, perfil FROM usuarios WHERE username != 'admin' ORDER BY id")
+            text("SELECT id, username, nome_completo, cpf, perfil FROM usuarios WHERE username != 'admin' ORDER BY id")
         ).fetchall()
 
     return templates.TemplateResponse(request, "usuarios.html", {
@@ -762,6 +806,8 @@ async def listar_usuarios(request: Request):
 async def novo_usuario(
     request: Request,
     username: str = Form(...),
+    nome_completo: str = Form(...),
+    cpf: str = Form(...),
     password: str = Form(...),
     perfil: str = Form(...)):
 
@@ -769,21 +815,29 @@ async def novo_usuario(
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
 
+    if not validar_cpf(cpf):
+        return RedirectResponse(url="/usuarios?erro=CPF+inválido", status_code=303)
+
+    cpf_formatado = formatar_cpf(cpf)
+
     try:
         with engine.connect() as conn:
             conn.execute(text("""
-                INSERT INTO usuarios (username, password, perfil)
-                VALUES (:username, :password, :perfil)
+                INSERT INTO usuarios (username, nome_completo, cpf, password, perfil)
+                VALUES (:username, :nome_completo, :cpf, :password, :perfil)
             """), {
                 "username": username,
+                "nome_completo": nome_completo,
+                "cpf": cpf_formatado,
                 "password": hash_password(password),
                 "perfil": perfil
             })
             conn.commit()
     except IntegrityError:
-        pass
+        return RedirectResponse(url="/usuarios?erro=Login+já+em+uso", status_code=303)
 
-    return RedirectResponse(url="/usuarios", status_code=303)
+    registrar_log(user.id, user.username, "CADASTRO_USUARIO", f"Novo usuário: {username} ({perfil})")
+    return RedirectResponse(url="/usuarios?msg=Usuário+cadastrado+com+sucesso", status_code=303)
 
 @app.get("/usuarios/deletar/{id}")
 async def deletar_usuario(request: Request, id: int):
@@ -803,6 +857,8 @@ async def editar_usuario(
     user_id: int,
     request: Request,
     username: str = Form(...),
+    nome_completo: str = Form(...),
+    cpf: str = Form(...),
     perfil: str = Form(...),
     password: str = Form(None)):
 
@@ -810,16 +866,25 @@ async def editar_usuario(
     if not user or user.perfil != "admin":
         return RedirectResponse(url="/", status_code=303)
 
+    if not validar_cpf(cpf):
+        return RedirectResponse(url="/usuarios?erro=CPF+inválido", status_code=303)
+
+    cpf_formatado = formatar_cpf(cpf)
+
     with engine.connect() as conn:
         if password:
             conn.execute(text("""
                 UPDATE usuarios
                 SET username = :username,
+                    nome_completo = :nome_completo,
+                    cpf = :cpf,
                     perfil = :perfil,
                     password = :password
                 WHERE id = :id
             """), {
                 "username": username,
+                "nome_completo": nome_completo,
+                "cpf": cpf_formatado,
                 "perfil": perfil,
                 "password": hash_password(password),
                 "id": user_id
@@ -828,16 +893,21 @@ async def editar_usuario(
             conn.execute(text("""
                 UPDATE usuarios
                 SET username = :username,
+                    nome_completo = :nome_completo,
+                    cpf = :cpf,
                     perfil = :perfil
                 WHERE id = :id
             """), {
                 "username": username,
+                "nome_completo": nome_completo,
+                "cpf": cpf_formatado,
                 "perfil": perfil,
                 "id": user_id
             })
         conn.commit()
 
-    return RedirectResponse(url="/usuarios", status_code=303)
+    registrar_log(user.id, user.username, "EDICAO_USUARIO", f"Usuário editado: {username}")
+    return RedirectResponse(url="/usuarios?msg=Usuário+atualizado+com+sucesso", status_code=303)
 
 
 # --- FORNECEDORES ---
