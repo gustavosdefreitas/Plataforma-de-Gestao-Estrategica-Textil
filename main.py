@@ -2077,19 +2077,18 @@ async def banco_horas_pdf(
 
         # Bloco de identificação do usuário
         pdf.setFillColorRGB(0.93, 0.96, 1.0)
-        pdf.rect(MARGEM, y - 6, largura - 2 * MARGEM, 52, fill=1, stroke=0)
+        pdf.rect(MARGEM, y - 6, largura - 2 * MARGEM, 40, fill=1, stroke=0)
         pdf.setFillColorRGB(0, 0, 0)
 
         pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(MARGEM + 8, y + 36, nome)
+        pdf.drawString(MARGEM + 8, y + 26, nome)
 
         pdf.setFont("Helvetica", 9)
-        pdf.drawString(MARGEM + 8, y + 22, f"Login: {username}")
         pdf.drawString(MARGEM + 8, y + 10, f"CPF: {cpf_fmt}")
         pdf.drawRightString(largura - MARGEM - 8, y + 10,
                             f"Total: {formatar_horas_minutos(total_usuario)}")
 
-        y -= 62
+        y -= 50
 
         # Cabeçalho da tabela de datas
         y = cabecalho_tabela(pdf, y)
