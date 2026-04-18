@@ -142,8 +142,16 @@ async function consultarCNPJ() {
         document.getElementById("tel").value = data.ddd_telefone_1 || data.ddd_telefone_2 || "";
         document.getElementById("email").value = data.email || "";
 
+        const sit = (data.descricao_situacao_cadastral || "").toUpperCase();
+        let badgeClass = "bg-warning text-dark";
+        if (sit === "ATIVA") badgeClass = "bg-success";
+        else if (["INAPTA", "SUSPENSA", "BAIXADA", "CANCELADA"].includes(sit)) badgeClass = "bg-danger";
+        const badgeHtml = sit
+            ? ` <span class="badge ${badgeClass}">${sit}</span>`
+            : "";
+
         status.className = "small text-success";
-        status.textContent = "Dados encontrados e preenchidos com sucesso.";
+        status.innerHTML = "Dados encontrados e preenchidos com sucesso." + badgeHtml;
     } catch (error) {
         console.error(error);
         status.className = "small text-danger";
