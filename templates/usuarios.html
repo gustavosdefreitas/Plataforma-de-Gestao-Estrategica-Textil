@@ -82,7 +82,7 @@
                          aria-modal="true" aria-labelledby="modalEditarLabel{{ u.id }}" aria-hidden="true">
                         <div class="modal-dialog modal-dialog-centered">
                             <div class="modal-content shadow-lg">
-                                <form action="/usuarios/editar/{{ u.id }}" method="POST">
+                                <form action="/usuarios/editar/{{ u.id }}" method="POST" aria-label="Editar usuário {{ u.username }}">
                                     <div class="modal-header bg-warning">
                                         <h5 class="modal-title fw-bold text-dark" id="modalEditarLabel{{ u.id }}">
                                             <i class="fas fa-user-edit me-2" aria-hidden="true"></i>Editar Usuário: {{ u.username }}

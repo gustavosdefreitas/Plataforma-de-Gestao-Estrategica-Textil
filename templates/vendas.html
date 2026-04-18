@@ -12,7 +12,7 @@
             </div>
 
             <div class="card-body">
-                <form action="/vendas/nova" method="POST" id="form-venda">
+                <form action="/vendas/nova" method="POST" id="form-venda" aria-label="Formulário de registro de venda">
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="tipo_documento" class="form-label fw-bold">Tipo de Documento</label>
@@ -59,7 +59,7 @@
                         <h6 class="fw-bold mb-0">
                             <i class="fas fa-box me-2" aria-hidden="true"></i>Itens da venda
                         </h6>
-                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="adicionarItem()">
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="adicionarItem()" aria-label="Adicionar mais um produto à venda">
                             <i class="fas fa-plus me-1" aria-hidden="true"></i>Adicionar produto
                         </button>
                     </div>
@@ -67,8 +67,8 @@
                     <div id="itens-venda">
                         <div class="row item-venda mb-3">
                             <div class="col-md-8">
-                                <label class="form-label fw-bold">Produto</label>
-                                <select name="produto_id" class="form-select" aria-label="Produto" required>
+                                <label class="form-label fw-bold" id="label-produto-0">Produto</label>
+                                <select name="produto_id" class="form-select" aria-labelledby="label-produto-0" aria-label="Produto" required>
                                     <option value="">Escolha um produto...</option>
                                     {% for produto in produtos %}
                                         <option value="{{ produto.id }}">
