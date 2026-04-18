@@ -12,7 +12,7 @@
 
 Sistema web full-stack para controle de estoque e vendas voltado a microempreendedores do setor têxtil e de aviamentos. Substitui controles manuais (livros físicos) por uma gestão digital centralizada em nuvem, com dashboard analítico, alertas de estoque, consulta automática de CNPJ na Receita Federal e relatórios exportáveis em PDF.
 
-🌐 **[Acesse o sistema em produção](https://plataforma-de-gestao-estrategica-textil.onrender.com)** — login: `admin` / `123456`
+🌐 **[Acesse o sistema em produção](https://plataforma-de-gestao-estrategica-textil.onrender.com)** — login: `univesp_admin` / `univesp_admin`
 
 ---
 
