@@ -108,6 +108,7 @@
                                                    value="{{ u.cpf or '' }}" class="form-control" required
                                                    placeholder="000.000.000-00" maxlength="14"
                                                    oninput="mascararCPF(this)">
+                                            <div class="invalid-feedback">CPF inválido. Verifique os dígitos.</div>
                                         </div>
                                         <div class="mb-3">
                                             <label for="edit_perfil_{{ u.id }}" class="form-label fw-bold">Perfil de Acesso</label>
@@ -205,13 +206,63 @@
 </div>
 
 <script>
-// Máscara de CPF: 000.000.000-00
+// ── Máscara de CPF: 000.000.000-00 ──────────────────────────────────────
 function mascararCPF(input) {
     let v = input.value.replace(/\D/g, '').slice(0, 11);
-    if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+    if (v.length > 9)      v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
     else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
     else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
     input.value = v;
+    // Valida em tempo real após digitar os 14 caracteres (000.000.000-00)
+    if (v.length === 14) {
+        const ok = validarCPF(v);
+        input.classList.toggle('is-invalid', !ok);
+        input.classList.toggle('is-valid',   ok);
+    } else {
+        input.classList.remove('is-invalid', 'is-valid');
+    }
 }
+
+// ── Validação dos dígitos verificadores ─────────────────────────────────
+function validarCPF(cpf) {
+    const d = cpf.replace(/\D/g, '');
+    if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+    let soma = 0;
+    for (let i = 0; i < 9; i++) soma += parseInt(d[i]) * (10 - i);
+    let r = (soma * 10) % 11;
+    if (r === 10 || r === 11) r = 0;
+    if (r !== parseInt(d[9])) return false;
+    soma = 0;
+    for (let i = 0; i < 10; i++) soma += parseInt(d[i]) * (11 - i);
+    r = (soma * 10) % 11;
+    if (r === 10 || r === 11) r = 0;
+    return r === parseInt(d[10]);
+}
+
+// ── Bloqueia submit se CPF inválido ─────────────────────────────────────
+function validarFormulario(form) {
+    const cpfInput = form.querySelector('input[name="cpf"]');
+    if (!cpfInput) return true;
+    if (!validarCPF(cpfInput.value)) {
+        cpfInput.classList.add('is-invalid');
+        cpfInput.focus();
+        return false;   // bloqueia o envio
+    }
+    return true;
+}
+
+// Aplica ao formulário de novo usuário
+document.getElementById('formNovoUsuario')
+    .addEventListener('submit', function(e) {
+        if (!validarFormulario(this)) e.preventDefault();
+    });
+
+// Aplica a cada formulário de edição (um por usuário na tabela)
+document.querySelectorAll('form[action^="/usuarios/editar/"]')
+    .forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            if (!validarFormulario(this)) e.preventDefault();
+        });
+    });
 </script>
 {% endblock %}
